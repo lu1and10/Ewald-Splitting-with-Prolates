@@ -316,6 +316,7 @@ static inline void legendre(int n, double x, double& pn, double& pn_prime) {
 
 // Function to compute the nodes and weights of the n-point Gaussian quadrature
 void gaussian_quadrature(int n, double* nodes, double* weights) {
+    constexpr double my_pi = 3.1415926535897932384626433832795028841L;
     static AlignedVector<AlignedVector<double>> precomp_nodes(1000);
     static AlignedVector<AlignedVector<double>> precomp_weights(1000);
 
@@ -333,7 +334,7 @@ void gaussian_quadrature(int n, double* nodes, double* weights) {
                     const double tolerance = 1e-16;
                     const int max_iterations = 100;
                     for (int i = 0; i < (n + 1) / 2; ++i) {
-                        double x = std::cos(M_PI * (i + 0.75) / (n + 0.5));
+                        double x = std::cos(my_pi * (i + 0.75) / (n + 0.5));
                         double pn, pn_prime;
 
                         for (int iter = 0; iter < max_iterations; ++iter) {
@@ -466,9 +467,10 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
 
 // start of actual cheb utils
 void cheb_nodes_1d(int order, AlignedVector<double>& nodes, double a, double b) {
+    constexpr double my_pi = 3.1415926535897932384626433832795028841L;
     if (nodes.size() != order) nodes.resize(order);
     for (int i = 0; i < order; i++) {
-        nodes[i] = -cos((i + (double)0.5) * M_PI / order) * (double)0.5 + (double)0.5;
+        nodes[i] = -cos((i + (double)0.5) * my_pi / order) * (double)0.5 + (double)0.5;
         nodes[i] = nodes[i] * (b - a) + a;
     }
 }

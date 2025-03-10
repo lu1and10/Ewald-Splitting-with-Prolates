@@ -132,6 +132,12 @@ enum
  */
 typedef double (*real_space_grid_contribution_computer)(double, double);
 
+/*! \brief Function pointer to calculate the grid contribution for coulomb/LJ
+ *
+ * Used to tell table_spline3_fill_ewald_lr whether it
+ * should calculate the grid contribution for electrostatics or LJ.
+ */
+typedef double (*real_space_grid_contribution_computer_pswf)(double, double, const interaction_const_t&);
 
 /*! \brief Construct tables with the Ewald long-range force interaction
  *
@@ -177,6 +183,43 @@ double v_q_ewald_lr(double beta, double r);
  *  \return      Real space grid contribution for Ewald Lennard-Jones interaction
  */
 double v_lj_ewald_lr(double beta, double r);
+
+/*! \brief Construct tables with the Ewald long-range force interaction
+ *
+ * Creates and fills tables of numPoints points with the spacing
+ * set to 1/tableScaling with the Ewald long-range (mesh) force.
+ * There are three separate tables with format F, V, FDV0.
+ * This function interpolates the Ewald mesh potential contribution
+ * with coefficient beta using a quadratic spline.
+ * The force is then be interpolated linearly.
+ *
+ * \param numPoints     Number of points in the tables
+ * \param tableScaling  1/spacing, units 1/nm
+ * \param beta          Ewald splitting parameter, units 1/nm
+ * \param v_lr          Pointer to function calculating real-space grid contribution
+ * \returns a set of Ewald correction tables
+ */
+EwaldCorrectionTables generateEwaldCorrectionTablesPSWF(int    numPoints,
+                                                    double tableScaling,
+                                                    real   beta,
+                                                    real_space_grid_contribution_computer v_lr);
+
+/*! \brief Compute scaling for the Ewald quadratic spline tables.
+ *
+ * \param ic                     Pointer to interaction constant structure
+ * \param generateCoulombTables  Take the spacing for Coulomb Ewald corrections into account
+ * \param generateVdwTables      Take the spacing for Van der Waals Ewald corrections into account
+ * \return The scaling factor in units 1/nm
+ */
+real ewald_spline3_table_scale_pswf(const interaction_const_t& ic, bool generateCoulombTables, bool generateVdwTables);
+
+/*! \brief Return the real space grid contribution for Ewald using PSWF splitting
+ *
+ *  \param beta  Ewald splitting parameter using PSWF
+ *  \param r     Distance for which to calculate the real-space contrib
+ *  \return      Real space grid contribution for Ewald electrostatics
+ */
+double v_q_ewald_lr_pswf(double beta, double r, const interaction_const_t& ic);
 
 /*! \brief Return tables for inner loops.
  *

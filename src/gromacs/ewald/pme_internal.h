@@ -431,6 +431,12 @@ struct gmx_pme_t
     std::vector<PmeAtomComm> atc; /* Indexed on decomposition index */
     matrix                   recipbox;
     real                     boxVolume;
+    /* pswf splitting long range modes table */
+    std::vector<real> pswf_mod;
+    /* spread pswf function polynomial coefficients */
+    AlignedVector<double> spread_pswf;
+    AlignedVector<double> spread_pswf_fourier;
+    AlignedVector<double> spread_pswf_derivative;
     // The B-spline moduli coefficients
     std::array<std::vector<real>, DIM> bsp_mod;
     /* Buffers to store data for local atoms for L-B combination rule

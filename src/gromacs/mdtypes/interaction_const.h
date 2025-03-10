@@ -96,6 +96,16 @@ struct EwaldCorrectionTables
     AlignedVector<real> tableFDV0;
 };
 
+struct PSWF_Polynomials
+{
+    //AlignedVector<double> spread_fun;
+    //AlignedVector<double> spread_fun_fourier;
+    //AlignedVector<double> spread_fun_derivative;
+    AlignedVector<double> pswf_long_range_energy;
+    AlignedVector<double> pswf_long_range_force;
+    AlignedVector<double> pswf_split_fun_fourier;
+};
+
 /* The physical interaction parameters for non-bonded interaction calculations
  *
  * This struct contains copies of the physical interaction parameters
@@ -178,6 +188,9 @@ struct interaction_const_t
     std::unique_ptr<EwaldCorrectionTables> coulombEwaldTables;
     // Van der Waals Ewald correction table
     std::unique_ptr<EwaldCorrectionTables> vdwEwaldTables;
+
+    // PSWF polynomials
+    std::unique_ptr<PSWF_Polynomials> pswfPolynomials;
 
     // Free-energy parameters, only present when free-energy calculations are requested
     std::unique_ptr<SoftCoreParameters> softCoreParameters;

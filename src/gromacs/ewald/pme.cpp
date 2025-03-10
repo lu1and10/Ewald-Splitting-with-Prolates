@@ -99,6 +99,7 @@
 #include "gromacs/math/units.h"
 #include "gromacs/math/vec.h"
 #include "gromacs/math/vectypes.h"
+#include "gromacs/math/pswf.h"
 #include "gromacs/mdtypes/commrec.h"
 #include "gromacs/mdtypes/forcerec.h"
 #include "gromacs/mdtypes/inputrec.h"
@@ -793,6 +794,11 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     pme->pme_order     = ir->pme_order;
     pme->ewaldcoeff_q  = ewaldcoeff_q;
     pme->ewaldcoeff_lj = ewaldcoeff_lj;
+
+    /* pme spread polynomials*/
+    spread_window_real_space(pme->pme_order, ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf);
+    spread_window_fourier_space(ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf_fourier);
+    // spread_window_real_space_derivative(ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf_derivative);
 
     /* Always constant electrostatics coefficients */
     pme->epsilon_r = ir->epsilon_r;

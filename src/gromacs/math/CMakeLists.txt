@@ -51,6 +51,7 @@ set(MATH_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/utilities.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/veccompare.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/vecdump.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pswf.cpp
         )
 set(LIBGROMACS_SOURCES ${LIBGROMACS_SOURCES} ${MATH_SOURCES} PARENT_SCOPE)
 

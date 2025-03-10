@@ -55,6 +55,7 @@
 #include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/pleasecite.h"
+#include "gromacs/math/pswf.h"
 
 interaction_const_t::SoftCoreParameters::SoftCoreParameters(const t_lambda& fepvals) :
     alphaVdw(fepvals.sc_alpha),
@@ -113,6 +114,10 @@ static void initCoulombEwaldParameters(FILE*                fp,
     }
 
     ic->ewaldcoeff_q = calc_ewaldcoeff_q(ir.rcoulomb, ir.ewald_rtol);
+    /* init the pswf ewald polynormials used in short range table generation */
+    long_range_real_energy(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_long_range_energy);
+    long_range_real_force(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_long_range_force);
+    splitting_function_fourier_space(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_split_fun_fourier);
     if (fp)
     {
         fprintf(fp, "Using a Gaussian width (1/beta) of %g nm for Ewald\n", 1 / ic->ewaldcoeff_q);
@@ -260,6 +265,8 @@ interaction_const_t init_interaction_const(FILE* fp, const t_inputrec& ir, const
 
     interactionConst.coulombEwaldTables = std::make_unique<EwaldCorrectionTables>();
     interactionConst.vdwEwaldTables     = std::make_unique<EwaldCorrectionTables>();
+
+    interactionConst.pswfPolynomials     = std::make_unique<PSWF_Polynomials>();
 
     /* Lennard-Jones */
     interactionConst.vdwtype         = ir.vdwtype;

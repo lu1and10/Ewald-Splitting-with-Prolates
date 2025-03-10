@@ -416,20 +416,24 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     double* tU = (double*)malloc(m * k * sizeof(double));
     double* tS = (double*)malloc(k * sizeof(double));
     double* tVT = (double*)malloc(k * n * sizeof(double));
+    int* iwork = (int*)malloc(8 * k * sizeof(int));
 
     // SVD
     int INFO = 0;
-    char JOBU = 'S';
-    char JOBVT = 'S';
+    //char JOBU = 'S';
+    //char JOBVT = 'S';
+    char JOBZ = 'S';
 
     int wssize = -1;
     double wkopt{0};
-    dgesvd_(&JOBU, &JOBVT, &m, &n, M, &m, tS, tU, &m, tVT, &k, &wkopt, &wssize, &INFO);
+    //dgesvd_(&JOBU, &JOBVT, &m, &n, M, &m, tS, tU, &m, tVT, &k, &wkopt, &wssize, &INFO);
+    dgesdd_(&JOBZ, &m, &n, M, &m, tS, tU, &m, tVT, &k, &wkopt, &wssize, iwork, &INFO);
     wssize = (int)wkopt;
 
     // double* wsbuf = (double*)aligned_alloc(alignment, wssize);
     double* wsbuf = (double*)malloc(wssize);
-    dgesvd_(&JOBU, &JOBVT, &m, &n, M, &m, tS, tU, &m, tVT, &k, wsbuf, &wssize, &INFO);
+    //dgesvd_(&JOBU, &JOBVT, &m, &n, M, &m, tS, tU, &m, tVT, &k, wsbuf, &wssize, &INFO);
+    dgesdd_(&JOBZ, &m, &n, M, &m, tS, tU, &m, tVT, &k, wsbuf, &wssize, iwork, &INFO);
     free(wsbuf);
 
     if (INFO != 0) std::cout << "svd failed with info: " << INFO << '\n';

@@ -42,6 +42,7 @@
 #include "gromacs/math/multidimarray.h"
 #include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
+#include "gromacs/math/pswf.h"
 #include "gromacs/mdspan/extensions.h"
 #include "gromacs/mdtypes/fcdata.h"
 #include "gromacs/mdtypes/interaction_const.h"
@@ -134,6 +135,187 @@ double v_lj_ewald_lr(double beta, double r)
         factor = (1.0 - std::exp(-br2) * (1 + br2 + 0.5 * br4)) / r6;
         return factor;
     }
+}
+
+double v_q_ewald_lr_pswf(double beta, double r, const interaction_const_t& ic)
+{
+    //int ncoeff = ic.pswfPolynomials->pswf_split_fun.size();
+    double result;
+    double arg = r/ic.rcoulomb;
+    if (arg >= 1.0)
+    {
+        return 1.0/r;
+    }
+    if (r == 0)
+    {
+        return ic.pswfcoeff_psi0/(ic.pswfcoeff_c0 * ic.rcoulomb);
+    }
+    //double result = ic.pswfPolynomials->pswf_split_fun[ncoeff-1];
+    //for (int i = ncoeff-2; i >= 0; i--)
+    //{
+        //result = result * arg + ic.pswfPolynomials->pswf_split_fun[i];
+    //}
+    //std::cout << std::scientific << std::setprecision(16);
+    //std::cout << "result: " << result << " r: " << r << " arg: " << arg << std::endl;
+    result = splitting_function_real_space_ref(ic.pswfcoeff_q, ic.pswfcoeff_c0, arg) / r;
+    return result;
+}
+
+EwaldCorrectionTables generatePSWFCorrectionTables(const interaction_const_t& ic,
+                                                   const int    numPoints,
+                                                   const double tableScaling,
+                                                   const real   beta,
+                                                   real_space_grid_contribution_computer_pswf v_lr)
+{
+    real     tab_max;
+    int      i, i_inrange;
+    double   dc, dc_new;
+    gmx_bool bOutOfRange;
+    double   v_r0, v_r1, v_inrange, vi, a0, a1, a2dx;
+    double   x_r0;
+
+    /* This function is called using either v_ewald_lr or v_lj_ewald_lr as a function argument
+     * depending on whether we should create electrostatic or Lennard-Jones Ewald tables.
+     */
+
+    if (numPoints < 2)
+    {
+        gmx_fatal(FARGS, "Can not make a spline table with less than 2 points");
+    }
+
+    const double dx = 1 / tableScaling;
+
+    EwaldCorrectionTables tables;
+    tables.scale = tableScaling;
+    tables.tableF.resize(numPoints);
+    tables.tableV.resize(numPoints);
+    tables.tableFDV0.resize(numPoints * 4);
+    gmx::ArrayRef<real> table_f    = tables.tableF;
+    gmx::ArrayRef<real> table_v    = tables.tableV;
+    gmx::ArrayRef<real> table_fdv0 = tables.tableFDV0;
+
+    /* We need some margin to be able to divide table values by r
+     * in the kernel and also to do the integration arithmetics
+     * without going out of range. Furthemore, we divide by dx below.
+     */
+    tab_max = GMX_REAL_MAX * 0.0001;
+
+    /* This function produces a table with:
+     * maximum energy error: V'''/(6*12*sqrt(3))*dx^3
+     * maximum force error:  V'''/(6*4)*dx^2
+     * The rms force error is the max error times 1/sqrt(5)=0.45.
+     */
+
+    bOutOfRange = FALSE;
+    i_inrange   = numPoints;
+    v_inrange   = 0;
+    dc          = 0;
+    for (i = numPoints - 1; i >= 0; i--)
+    {
+        x_r0 = i * dx;
+
+        v_r0 = (*v_lr)(beta, x_r0, ic);
+
+        if (!bOutOfRange)
+        {
+            i_inrange = i;
+            v_inrange = v_r0;
+
+            vi = v_r0;
+        }
+        else
+        {
+            /* Linear continuation for the last point in range */
+            vi = v_inrange - dc * (i - i_inrange) * dx;
+        }
+
+        table_v[i] = vi;
+
+        if (i == 0)
+        {
+            continue;
+        }
+
+        /* Get the potential at table point i-1 */
+        v_r1 = (*v_lr)(beta, (i - 1) * dx, ic);
+
+        if (v_r1 != v_r1 || v_r1 < -tab_max || v_r1 > tab_max)
+        {
+            bOutOfRange = TRUE;
+        }
+
+        if (!bOutOfRange)
+        {
+            /* Calculate the average second derivative times dx over interval i-1 to i.
+             * Using the function values at the end points and in the middle.
+             */
+            a2dx = (v_r0 + v_r1 - 2 * (*v_lr)(beta, x_r0 - 0.5 * dx, ic)) / (0.25 * dx);
+            /* Set the derivative of the spline to match the difference in potential
+             * over the interval plus the average effect of the quadratic term.
+             * This is the essential step for minimizing the error in the force.
+             */
+            dc = (v_r0 - v_r1) / dx + 0.5 * a2dx;
+        }
+
+        if (i == numPoints - 1)
+        {
+            /* Fill the table with the force, minus the derivative of the spline */
+            table_f[i] = -dc;
+        }
+        else
+        {
+            /* tab[i] will contain the average of the splines over the two intervals */
+            table_f[i] += -0.5 * dc;
+        }
+
+        if (!bOutOfRange)
+        {
+            /* Make spline s(x) = a0 + a1*(x - xr) + 0.5*a2*(x - xr)^2
+             * matching the potential at the two end points
+             * and the derivative dc at the end point xr.
+             */
+            a0   = v_r0;
+            a1   = dc;
+            a2dx = (a1 * dx + v_r1 - a0) * 2 / dx;
+
+            /* Set dc to the derivative at the next point */
+            dc_new = a1 - a2dx;
+
+            if (dc_new != dc_new || dc_new < -tab_max || dc_new > tab_max)
+            {
+                bOutOfRange = TRUE;
+            }
+            else
+            {
+                dc = dc_new;
+            }
+        }
+
+        table_f[(i - 1)] = -0.5 * dc;
+    }
+    /* Currently the last value only contains half the force: double it */
+    table_f[0] *= 2;
+
+    if (!table_fdv0.empty())
+    {
+        /* Copy to FDV0 table too. Allocation occurs in forcerec.c,
+         * init_ewald_f_table().
+         */
+        for (i = 0; i < numPoints - 1; i++)
+        {
+            table_fdv0[4 * i]     = table_f[i];
+            table_fdv0[4 * i + 1] = table_f[i + 1] - table_f[i];
+            table_fdv0[4 * i + 2] = table_v[i];
+            table_fdv0[4 * i + 3] = 0.0;
+        }
+        const int lastPoint           = numPoints - 1;
+        table_fdv0[4 * lastPoint]     = table_f[lastPoint];
+        table_fdv0[4 * lastPoint + 1] = -table_f[lastPoint];
+        table_fdv0[4 * lastPoint + 2] = table_v[lastPoint];
+        table_fdv0[4 * lastPoint + 3] = 0.0;
+    }
+
+    return tables;
 }
 
 EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
@@ -304,12 +486,90 @@ static double spline3_table_scale(double third_deriv_max, double x_scale, double
     /* Force tolerance: single precision accuracy */
     deriv_tol = GMX_FLOAT_EPS;
     sc_deriv  = std::sqrt(third_deriv_max / (6 * 4 * deriv_tol * x_scale)) * x_scale;
+    std::cout << "third_deriv_max: " << third_deriv_max << std::endl;
+    std::cout << "deriv_tol: " << deriv_tol << std::endl;
+    std::cout << "x_scale: " << x_scale << std::endl;
+    std::cout << "sc_deriv: " << sc_deriv << std::endl;
 
     /* Don't try to be more accurate on energy than the precision */
     func_tol = std::max(func_tol, static_cast<double>(GMX_REAL_EPS));
     sc_func  = std::cbrt(third_deriv_max / (6 * 12 * std::sqrt(3.0) * func_tol)) * x_scale;
+    std::cout << "sc_func: " << sc_func << std::endl;
 
     return std::max(sc_deriv, sc_func);
+}
+
+/* The scale (1/spacing) for third order spline interpolation
+ * of the Ewald mesh contribution which needs to be subtracted
+ * from the non-bonded interactions.
+ * Since there is currently only one spacing for Coulomb and LJ,
+ * the finest spacing is used if both Ewald types are present.
+ *
+ * Note that we could also implement completely separate tables
+ * for Coulomb and LJ Ewald, each with their own spacing.
+ * The current setup with the same spacing can provide slightly
+ * faster kernels with both Coulomb and LJ Ewald, especially
+ * when interleaving both tables (currently not implemented).
+ */
+real ewald_spline3_table_scale_pswf(const interaction_const_t& ic,
+                               const bool                 generateCoulombTables,
+                               const bool                 generateVdwTables)
+{
+    GMX_RELEASE_ASSERT(!generateCoulombTables || usingPmeOrEwald(ic.eeltype),
+                       "Can only use tables with Ewald");
+    GMX_RELEASE_ASSERT(!generateVdwTables || usingLJPme(ic.vdwtype),
+                       "Can only use tables with Ewald");
+
+    real sc = 0;
+
+    if (generateCoulombTables)
+    {
+        GMX_RELEASE_ASSERT(ic.ewaldcoeff_q > 0, "The Ewald coefficient should be positive");
+
+        // max of (phi_0^c(x)/x)''', phi_0^c is the prolate splitting function, phi_0^c(x) = int_0^x psi_0^c(y) dy
+        double pswf_x_d3 = 0.0;
+        prolc180_der3(ic.ewald_rtol, pswf_x_d3);
+        double etol;
+        real   sc_q;
+
+        /* Energy tolerance: 0.1 times the cut-off jump */
+        // etol = 0.1 * std::erfc(ic.ewaldcoeff_q * ic.rcoulomb);
+        etol = ic.ewald_rtol;
+
+        sc_q = spline3_table_scale(pswf_x_d3, 1.0/ic.rcoulomb, etol);
+
+        if (debug)
+        {
+            fprintf(debug, "Ewald Coulomb quadratic spline table spacing: %f nm\n", 1 / sc_q);
+        }
+
+        std::cout << "Ewald Coulomb pswf quadratic spline table scale: " << sc_q << std::endl;
+        sc = std::max(sc, sc_q);
+    }
+
+    if (generateVdwTables)
+    {
+        GMX_RELEASE_ASSERT(ic.ewaldcoeff_lj > 0, "The Ewald coefficient should be positive");
+
+        double func_d3 = 0.42888; /* max of (x^-6 (1 - exp(-x^2)(1+x^2+x^4/2)))''' */
+        double xrc2, etol;
+        real   sc_lj;
+
+        /* Energy tolerance: 0.1 times the cut-off jump */
+        xrc2 = gmx::square(ic.ewaldcoeff_lj * ic.rvdw);
+        etol = 0.1 * std::exp(-xrc2) * (1 + xrc2 + xrc2 * xrc2 / 2.0);
+
+        sc_lj = spline3_table_scale(func_d3, ic.ewaldcoeff_lj, etol);
+
+        if (debug)
+        {
+            fprintf(debug, "Ewald LJ quadratic spline table spacing: %f nm\n", 1 / sc_lj);
+        }
+
+        sc = std::max(sc, sc_lj);
+    }
+
+    return sc;
 }
 
 /* The scale (1/spacing) for third order spline interpolation
@@ -353,6 +613,7 @@ real ewald_spline3_table_scale(const interaction_const_t& ic,
             fprintf(debug, "Ewald Coulomb quadratic spline table spacing: %f nm\n", 1 / sc_q);
         }
 
+        std::cout << "Ewald Coulomb quadratic spline table scale: " << sc_q << std::endl;
         sc = std::max(sc, sc_q);
     }
 

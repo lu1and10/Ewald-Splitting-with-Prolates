@@ -53,6 +53,8 @@
 #include "pme_internal.h"
 #include "pme_simd.h"
 #include "pme_spline_work.h"
+#include "gromacs/math/pswf.h"
+#include <iostream>
 
 /* TODO consider split of pme-spline from this file */
 
@@ -211,6 +213,123 @@ static void make_thread_local_ind(const PmeAtomComm* atc, int thread, splinedata
 // region.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Warray-bounds"
+
+/* Macro to force loop unrolling by fixing order.
+   This gives a significant performance gain.
+   Evaluate pswf spread function.
+ */
+#define CALC_PSWF_REF(order)                                                                     \
+    {                                                                                            \
+        for (int j = 0; (j < DIM); j++)                                                          \
+        {                                                                                        \
+            real dr;                                                                             \
+            real data[PME_ORDER_MAX];                                                            \
+            real data_der[PME_ORDER_MAX];                                                        \
+                                                                                                 \
+            /* dr is relative offset from lower cell limit */                                    \
+            dr = xptr[j];                                                                        \
+                                                                                                 \
+            for (int k = 0; k < (order); k++)                                                    \
+            {                                                                                    \
+                data[k] = spread_window_ref(c, order, k, dr);                                    \
+                data_der[k] = spread_window_der_ref(c, order, k, dr);                            \
+            }                                                                                    \
+                                                                                                 \
+            for (int k = 0; k < (order); k++)                                                    \
+            {                                                                                    \
+                theta[j][i * (order) + k] = data[order - k - 1];                                 \
+                dtheta[j][i * (order) + k] = data_der[order - k - 1];                            \
+            }                                                                                    \
+        }                                                                                        \
+    }
+
+#define CALC_PSWF(order)                                                                         \
+    {                                                                                            \
+        for (int j = 0; (j < DIM); j++)                                                          \
+        {                                                                                        \
+            real dr;                                                                             \
+            real data[PME_ORDER_MAX];                                                            \
+            real data_der[PME_ORDER_MAX];                                                        \
+                                                                                                 \
+            /* dr is relative offset from lower cell limit */                                    \
+            dr = xptr[j];                                                                        \
+                                                                                                 \
+            for (int k = 0; k < (order); k++)                                                    \
+            {                                                                                    \
+                data[k] = mono_eval(poly_order, &pswf_coeff[k*poly_order], dr);                  \
+                data_der[k] = mono_eval(poly_order_der, &pswf_der_coeff[k*poly_order_der], dr);  \
+            }                                                                                    \
+                                                                                                 \
+            for (int k = 0; k < (order); k++)                                                    \
+            {                                                                                    \
+                theta[j][i * (order) + k] = data[order - k - 1];                                 \
+                dtheta[j][i * (order) + k] = data_der[order - k - 1];                            \
+            }                                                                                    \
+        }                                                                                        \
+    }
+
+// TODO libin: optimized simd version
+static void make_pswfs(gmx::ArrayRef<real*> theta,
+                       gmx::ArrayRef<real*> dtheta,
+                       int                  order,
+                       int                  poly_order,
+                       int                  poly_order_der,
+                       int                  c,
+                       rvec                 fractx[],
+                       int                  nr,
+                       const int            ind[],
+                       const real           coefficient[],
+                       const double         pswf_coeff[],
+                       const double         pswf_der_coeff[],
+                       const bool           computeAllSplineCoefficients)
+{
+    /* construct splines for local atoms */
+    int   i, ii;
+    real* xptr;
+
+    //std::cout<< "order: " << order << " nr: " << nr << std::endl;
+    for (i = 0; i < nr; i++)
+    {
+        /* With free energy we do not use the coefficient check.
+         * In most cases this will be more efficient than calling make_bsplines
+         * twice, since usually more than half the particles have non-zero coefficients.
+         */
+        ii = ind[i];
+        if (computeAllSplineCoefficients || coefficient[ii] != 0.0)
+        {
+            xptr = fractx[ii];
+            assert(order >= 3 && order <= PME_ORDER_MAX);
+            switch (order)
+            {
+                // TODO: switch to use monomial basis
+                case 3: CALC_PSWF(3) break;
+                case 4: CALC_PSWF(4) break;
+                case 5: CALC_PSWF(5) break;
+                case 6: CALC_PSWF(6) break;
+                case 7: CALC_PSWF(7) break;
+                case 8: CALC_PSWF(8) break;
+                case 9: CALC_PSWF(9) break;
+                case 10: CALC_PSWF(10) break;
+                case 11: CALC_PSWF(11) break;
+                case 12: CALC_PSWF(12) break;
+                default: CALC_PSWF(order) break;
+            }
+            /*
+            for (int j = 0; j < DIM; j++)
+            {
+                std::cout<<"xptr[j]: "<<xptr[j]<<std::endl;
+                for (int k = 0; k < order; k++)
+                {
+                    std::cout << "i: " << i << " j: " << j << " k: " << k << std::endl;
+                    std::cout << "theta[j][i * order + k]: " << theta[j][i * order + k] << std::endl;
+                    std::cout << "dtheta[j][i * order + k]: " << dtheta[j][i * order + k] << std::endl;
+                }
+            }
+            */
+        }
+    }
+    //std::cout<<"pswf done"<<std::endl;
+}
 
 /* Macro to force loop unrolling by fixing order.
  * This gives a significant performance gain.
@@ -971,6 +1090,7 @@ void spread_on_grid(const gmx_pme_t* pme,
 
             if (calculateSplines)
             {
+                if(false){
                 make_bsplines(spline->theta.coefficients,
                               spline->dtheta.coefficients,
                               pme->pme_order,
@@ -979,6 +1099,22 @@ void spread_on_grid(const gmx_pme_t* pme,
                               spline->ind.data(),
                               atc->coefficient.data(),
                               computeAllSplineCoefficients);
+                }
+                else {
+                make_pswfs(spline->theta.coefficients,
+                           spline->dtheta.coefficients,
+                           pme->pme_order,
+                           pme->spread_pswf.size()/pme->pme_order,
+                           pme->spread_pswf_derivative.size()/pme->pme_order,
+                           pme->pswf_spread_coeff_q,
+                           as_rvec_array(atc->fractx.data()),
+                           spline->n,
+                           spline->ind.data(),
+                           atc->coefficient.data(),
+                           pme->spread_pswf.data(),
+                           pme->spread_pswf_derivative.data(),
+                           computeAllSplineCoefficients);
+                }
             }
 
             if (doSpreading)

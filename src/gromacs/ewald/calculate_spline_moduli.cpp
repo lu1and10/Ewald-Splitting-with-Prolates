@@ -38,6 +38,7 @@
 #include <cmath>
 
 #include <algorithm>
+#include <iostream>
 
 #include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
@@ -46,6 +47,7 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/gmxassert.h"
+#include "gromacs/math/pswf.h"
 
 static std::vector<real> make_dft_mod(gmx::ArrayRef<const double> data, int splineOrder, int ndata)
 {
@@ -203,6 +205,111 @@ std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz,
     bsp_mod[XX] = make_p3m_bspline_moduli_dim(nx, order);
     bsp_mod[YY] = make_p3m_bspline_moduli_dim(ny, order);
     bsp_mod[ZZ] = make_p3m_bspline_moduli_dim(nz, order);
+
+    return bsp_mod;
+}
+
+/* Calculate the pswf moduli for one dimension */
+static std::vector<real> make_pswf_moduli_dim(int n, int order, double c, int poly_order, double poly_coeff[])
+{
+    double zarg, zargi;
+    int    maxk, i;
+
+    std::vector<real> bsp_mod(n, 0.0);
+
+    zarg = (M_PI*order) / (n*c);
+    //std::cout << "zarg: " << zarg << std::endl;
+    //std::cout << "M_PI: " << M_PI << std::endl;
+    //std::cout << "order: " << order << std::endl;
+    //std::cout << "n: " << n << std::endl;
+    //std::cout << "c: " << c << std::endl;
+
+    maxk = (n + 1) / 2;
+
+    for (i = -maxk; i < 0; i++)
+    {
+        zargi           = - zarg * i;
+        //std::cout << "zargi: " << zargi << " ,i: " << i << std::endl;
+        if (zargi > 1.0)
+        {
+            std::cout << "spread pswf fourier zargi is > 1: " << zargi << " ,i: " << i << std::endl;
+            bsp_mod[n + i] = 1.0e38;
+            continue;
+        }
+        /*
+        bsp_mod[n + i] = poly_coeff[poly_order-1];
+        for (int j = poly_order-2; j >= 0; j--)
+        {
+            //bsp_mod[n + i] = bsp_mod[n + i] * zargi + poly_coeff[j];
+        }
+        */
+        bsp_mod[n+i] = spread_window_fourier_ref(c, zargi);
+        bsp_mod[n+i] = bsp_mod[n+i] * bsp_mod[n+i];
+    }
+    //bsp_mod[0] = poly_coeff[0]*poly_coeff[0];
+    bsp_mod[0] = spread_window_fourier_ref(c, 0.0);
+    bsp_mod[0] = bsp_mod[0] * bsp_mod[0];
+    for (i = 1; i < maxk; i++)
+    {
+        zargi       = zarg * i;
+        //std::cout << "zargi: " << zargi << " ,i: " << i << std::endl;
+        if (zargi > 1.0)
+        {
+            std::cout << "spread pswf fourier zargi is > 1: " << zargi << " ,i: " << i << std::endl;
+            bsp_mod[i] = 1.0e38;
+            continue;
+        }
+        /*
+        bsp_mod[i] = poly_coeff[poly_order-1];
+        for (int j = poly_order-2; j >= 0; j--)
+        {
+            bsp_mod[i] = bsp_mod[i] * zargi + poly_coeff[j];
+        }
+        */
+        bsp_mod[i] = spread_window_fourier_ref(c, zargi);
+        bsp_mod[i] = bsp_mod[i] * bsp_mod[i];
+    }
+
+    return bsp_mod;
+}
+
+/* Calculate the P3M B-spline moduli */
+std::array<std::vector<real>, 3> make_pswf_moduli(int nx, int ny, int nz, int order, double c, int poly_order, double poly_coeff[])
+{
+    std::cout << "make_pswf_moduli" << std::endl;
+    std::array<std::vector<real>, 3> bsp_mod;
+
+    //std::cout << "nx: " << nx << " order: " << order << " c: " << c << " poly_order: " << poly_order << std::endl;
+
+    bsp_mod[XX] = make_pswf_moduli_dim(nx, order, c, poly_order, poly_coeff);
+    /*
+    std::cout<< "make_pswf_moduli_dim xx: " << std::endl;
+    for (auto &i : bsp_mod[XX])
+    {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+    */
+
+    bsp_mod[YY] = make_pswf_moduli_dim(ny, order, c, poly_order, poly_coeff);
+    /*
+    std::cout<< "make_pswf_moduli_dim yy: " << std::endl;
+    for (auto &i : bsp_mod[YY])
+    {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+    */
+
+    bsp_mod[ZZ] = make_pswf_moduli_dim(nz, order, c, poly_order, poly_coeff);
+    /*
+    std::cout<< "make_pswf_moduli_dim zz: " << std::endl;
+    for (auto &i : bsp_mod[ZZ])
+    {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+    */
 
     return bsp_mod;
 }

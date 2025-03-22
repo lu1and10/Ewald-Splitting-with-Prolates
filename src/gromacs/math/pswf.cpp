@@ -431,7 +431,7 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     wssize = (int)wkopt;
 
     // double* wsbuf = (double*)aligned_alloc(alignment, wssize);
-    double* wsbuf = (double*)malloc(wssize);
+    double* wsbuf = (double*)malloc(wssize*sizeof(double));
     //dgesvd_(&JOBU, &JOBVT, &m, &n, M, &m, tS, tU, &m, tVT, &k, wsbuf, &wssize, &INFO);
     dgesdd_(&JOBZ, &m, &n, M, &m, tS, tU, &m, tVT, &k, wsbuf, &wssize, iwork, &INFO);
     free(wsbuf);
@@ -466,9 +466,65 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     free(tU);
     free(tS);
     free(tVT);
+    free(iwork);
 }
 // end of math utils
 
+// start of monomial utils
+static inline void monomial_nodes_1d(int nnodes, AlignedVector<double>& nodes, double a = 0, double b = 1) {
+    if (nodes.size() != nnodes) nodes.resize(nnodes);
+    for (int i = 0; i < nnodes; i++) {
+        nodes[i] = (double)i / (double)(nnodes - 1) * (b - a) + a;
+    }
+}
+
+static inline void monomial_basis_1d(int order, const AlignedVector<double>& x, AlignedVector<double>& y,
+                                     double a = 0, double b = 1) {
+    int n = x.size();
+    if (y.size() != order * n) y.resize(order * n);
+
+    for (Long i = 0; i < n; i++) {
+        for (int j = 0; j < order; j++) {
+            y[j * n + i] = pow((x[i] - a) / (b - a), order - j - 1);
+        }
+    }
+}
+
+static inline void monomial_interp_1d(int order, int nnodes, AlignedVector<double>& fn_v, AlignedVector<double>& coeff,
+                                      double a = 0, double b = 1) {
+    /*
+    static AlignedVector<AlignedVector<double>> precomp(1000);
+    {  // Precompute
+        assert(order < precomp.size());
+        if (precomp[order].size() == 0) {
+#pragma omp critical(MONOMIAL_BASIS_APPROX)
+            if (precomp[order].size() == 0) {
+                AlignedVector<double> x, p;
+                monomial_nodes_1d(order, x, a, b);
+                monomial_basis_1d(order, x, p);
+                AlignedVector<double> Mp1(order * order);
+                pseudo_inv(p.data(), order, order, std::numeric_limits<double>::epsilon(),
+                           Mp1.data());
+                precomp[order].swap(Mp1);
+            }
+        }
+    }
+    AlignedVector<double>& Mp = precomp[order];
+    Long dof = fn_v.size() / order;
+    */
+    AlignedVector<double> x, p, Mp(order * nnodes);
+    //monomial_nodes_1d(nnodes, x, a, b);
+    cheb_nodes_1d(nnodes, x, a, b);
+    monomial_basis_1d(order, x, p);
+    // TODO: check solve in lsq sense, i.e., mul order matters (us)(v^t x)
+    pseudo_inv(p.data(), order, nnodes, std::numeric_limits<double>::epsilon(), Mp.data());
+    Long dof  = fn_v.size() / nnodes;
+    assert(fn_v.size() == dof * nnodes);
+    if (coeff.size() != dof * order) coeff.resize(dof * order);
+    gemm(order, dof, nnodes, fn_v.data(), Mp.data(), coeff.data());
+}
+
+// end of monomial utils
 // start of actual cheb utils
 void cheb_nodes_1d(int order, AlignedVector<double>& nodes, double a, double b) {
     constexpr double my_pi = 3.1415926535897932384626433832795028841L;
@@ -599,17 +655,127 @@ void cheb2mono(int order, int dof, AlignedVector<double>& cheb_coeff, AlignedVec
     gemm(order, dof, order, cheb_coeff.data(), Mp.data(), mono_coeff.data());
 }
 
-double mono_eval(int order, const AlignedVector<double>& mono_coeff, double x) {
-    double result = mono_coeff[order - 1];
-    for (int i = order - 2; i >= 0; i--) {
-        result = result * x + mono_coeff[i];
+template <int order>
+double mono_eval_template(const double* mono_coeff, double x) {
+    if (order == 0) return 0.0;
+    if (order == 1) return mono_coeff[0];
+
+    double y = mono_coeff[0];
+    for (int i = 1; i < order; i++) {
+        y = mono_coeff[i] + x * y;
     }
-    return result;
+
+    return y;
 }
-// end of actual cheb utils
+
+template <int poly_order>
+double mono_eval_dispatch(int order, const double* mono_coeff, double x) {
+    static_assert(poly_order <= MAX_CHEB_ORDER, "poly_order must be in the range [0, 30]");
+    if constexpr (poly_order == 0) { 
+        return mono_eval_template<0>(mono_coeff, x);
+    }
+    else {
+        if(poly_order == order){
+            return mono_eval_template<poly_order>(mono_coeff, x);
+        }
+        else {
+            return mono_eval_dispatch<poly_order-1>(order, mono_coeff, x);
+        }
+
+    }
+}
+
+double mono_eval(int order, const double* mono_coeff, double x) {
+    return mono_eval_dispatch<MAX_CHEB_ORDER>(order, mono_coeff, x);
+}
+
+// clenshaw cheb eval
+template <int order>
+double cheb_eval_template(const double* cheb_coeff, double x, double a, double b) {
+    if (order == 0) return 0.0;
+    if (order == 1) return cheb_coeff[0];
+
+    // Transform x from [a,b] to [-1,1]
+    double y = 2.0 * (x - a) / (b - a) - 1.0;
+    double y2 = 2.0 * y;
+
+    double b0 = 0.0;
+    double b1 = 0.0;
+    double b2 = 0.0;
+
+    for (int i = order - 1; i > 0; --i) {
+        b2 = b1;
+        b1 = b0;
+        b0 = cheb_coeff[i] + y2 * b1 - b2;
+    }
+
+    return cheb_coeff[0] + b0 * y - b1;
+}
+
+template <int poly_order>
+double cheb_eval_dispatch(int order, const double* cheb_coeff, double x, double a, double b) {
+    static_assert(poly_order <= MAX_CHEB_ORDER, "poly_order must be in the range [0, 30]");
+    if constexpr (poly_order == 0) { 
+        return cheb_eval_template<0>(cheb_coeff, x, a, b);
+    }
+    else {
+        if(poly_order == order){
+            return cheb_eval_template<poly_order>(cheb_coeff, x, a, b);
+        }
+        else {
+            return cheb_eval_dispatch<poly_order-1>(order, cheb_coeff, x, a, b);
+        }
+
+    }
+}
+
+//double cheb_eval(int order, const AlignedVector<double>& cheb_coeff, double x, double a, double b) {
+double cheb_eval(int order, const double* cheb_coeff, double x, double a, double b) {
+   return cheb_eval_dispatch<MAX_CHEB_ORDER>(order, cheb_coeff, x, a, b);
+}
 // end of chebyshev functions
 
 // start of prolate functions
+void prolc180_der3(double eps, double& der3) {
+
+    static const std::array<double, 180> der3s = {
+        0.0                  , 3.703231117106314e-02, 2.662796075011415e-01, 5.941926542747007e-01, 9.578230754832373e-01, 1.363569812949696e+00,
+        1.807582627232425e+00, 2.287040787443315e+00, 2.800489841625932e+00, 3.346520825211228e+00, 3.925129833524817e+00, 4.535419879018613e+00,
+        5.177538088593701e+00, 5.851057619952580e+00, 6.555804054828174e+00, 7.292020430656394e+00, 8.059158990368712e+00, 8.857123665436557e+00,
+        9.686327541088655e+00, 1.054640955930842e+01, 1.143707141760266e+01, 1.235843748588681e+01, 1.331074380051023e+01, 1.429316645410095e+01,
+        1.530644212280254e+01, 1.634980229052360e+01, 1.742371527350574e+01, 1.852786959134436e+01, 1.966241028647265e+01, 2.082706565691709e+01,
+        2.202156399063638e+01, 2.324513764895337e+01, 2.450154874132168e+01, 2.578557879197864e+01, 2.710219152702352e+01, 2.844590643457592e+01,
+        2.982194872189250e+01, 3.122457703819981e+01, 3.265927724478793e+01, 3.412004831578323e+01, 3.561263588011575e+01, 3.713704155571862e+01,
+        3.869326681306944e+01, 4.027479309954505e+01, 4.188123512956217e+01, 4.352576155609020e+01, 4.519494867085516e+01, 4.689544558088133e+01,
+        4.862725312364265e+01, 5.038308226775531e+01, 5.216996738943379e+01, 5.398790913473069e+01, 5.583690809846664e+01, 5.771696483563476e+01,
+        5.962015154378219e+01, 6.155414190868980e+01, 6.351893636867634e+01, 6.551453532837742e+01, 6.753250221415664e+01, 6.958958399152446e+01,
+        7.166878031319368e+01, 7.377852843589304e+01, 7.591882864408177e+01, 7.808968120601168e+01, 8.028188878922057e+01, 8.251372002218120e+01,
+        8.476665370485364e+01, 8.704988763041084e+01, 8.936342198942501e+01, 9.170725696750367e+01, 9.408139273542218e+01, 9.647574810864796e+01,
+        9.891035968318585e+01, 1.013649391732796e+02, 1.038495680706917e+02, 1.063748312950304e+02, 1.089196851143706e+02, 1.114945887021435e+02,
+        1.140885801820887e+02, 1.167234579055465e+02, 1.193883857149036e+02, 1.220720250413416e+02, 1.247969275635160e+02, 1.275402908406401e+02,
+        1.303251684172720e+02, 1.331282559724378e+02, 1.359611431651965e+02, 1.388238300708471e+02, 1.417163167603507e+02, 1.446386032954563e+02,
+        1.475782236729200e+02, 1.505599848644160e+02, 1.535715460806204e+02, 1.566000662021011e+02, 1.596711024010027e+02, 1.627588477107742e+02,
+        1.658893590967149e+02, 1.690363297860595e+02, 1.722128508870634e+02, 1.754189224418921e+02, 1.786545444888072e+02, 1.819197170667437e+02,
+        1.852144402114015e+02, 1.885387139581953e+02, 1.918925383387225e+02, 1.952759133924808e+02, 1.986743765316800e+02, 2.021167283277167e+02,
+        2.055886308747634e+02, 2.090752480704547e+02, 2.126061275354775e+02, 2.161514728445827e+02, 2.197413293189910e+02, 2.233454028450144e+02,
+        2.269787784335390e+02, 2.306414561065548e+02, 2.343491422119853e+02, 2.380705482795840e+02, 2.418212564954385e+02, 2.456012668766033e+02,
+        2.494105794440804e+02, 2.532491942146669e+02, 2.571171112093926e+02, 2.610143304358681e+02, 2.649241522962268e+02, 2.688798518867251e+02,
+        2.728648537691562e+02, 2.768791579444873e+02, 2.809055686954829e+02, 2.849783533576689e+02, 2.890804403554123e+02, 2.931942620075851e+02,
+        2.973548295757224e+02, 3.015268840118008e+02, 3.057279930461074e+02, 3.099762194632530e+02, 3.142355613580597e+02, 3.185422684529161e+02,
+        3.228598432462443e+02, 3.272064726902580e+02, 3.315821567930542e+02, 3.360057012097200e+02, 3.404396183022963e+02, 3.449025900686188e+02,
+        3.493946165380561e+02, 3.539156977033438e+02, 3.584658335865259e+02, 3.630450242038053e+02, 3.676532695407853e+02, 3.722905695962574e+02,
+        3.769569244097179e+02, 3.816523339874616e+02, 3.863767983079612e+02, 3.911100281057601e+02, 3.958924783306446e+02, 4.007039833307977e+02,
+        4.055445431251419e+02, 4.103933743959938e+02, 4.152919201395830e+02, 4.202195206860208e+02, 4.251550223528558e+02, 4.301406088745175e+02,
+        4.351552502298094e+02, 4.401774223148202e+02, 4.452500497108158e+02, 4.503299610661473e+02, 4.554605744971888e+02, 4.605982251667677e+02,
+        4.657646839606519e+02, 4.709822146642819e+02, 4.762064127721131e+02, 4.814819295722471e+02, 4.867638670342317e+02, 4.920746126195583e+02,
+        4.974370467592532e+02, 5.028055317088541e+02, 5.082028248088587e+02, 5.136289260479356e+02, 5.191072088380275e+02, 5.245910494770286e+02,};
+
+        if (eps < 1.0e-18) eps = 1e-18;
+        double d = -log10(eps);
+        int i = static_cast<int>(d * 10 + 0.1);
+        der3 = der3s[i - 1];
+}
+
 static inline void prolc180(double eps, double& c) {
     static const std::array<double, 180> cs = {
         0.43368E-16, 0.10048E+01, 0.17298E+01, 0.22271E+01, 0.26382E+01, 0.30035E+01, 0.33409E+01,
@@ -1127,6 +1293,21 @@ struct Prolate0Fun {
 };
 
 /*
+evaluate prolate0c derivative at x, i.e., \psi_0^c(x)
+*/
+double prolate0_eval_derivative(double c, double x) {
+    static std::unordered_map<double, Prolate0Fun> prolate0_funcs_cache;
+    if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
+#pragma omp critical(PROLATE0_EVAL)
+        if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
+            std::cout << "Creating new eval Prolate0Fun derivative for c = " << c << std::endl;
+            prolate0_funcs_cache.emplace(c, Prolate0Fun(c, 10000));
+        }
+    }
+    return prolate0_funcs_cache[c].eval_derivative(x);
+}
+
+/*
 evaluate prolate0c at x, i.e., \psi_0^c(x)
 */
 double prolate0_eval(double c, double x) {
@@ -1158,11 +1339,224 @@ double prolate0_int_eval(double c, double r) {
 // end of prolate functions
 
 // start of approximation functions
-void spread_window_real_space(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs) {
-    double c;
+void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
     prolc180(tol, c);
 
-    int order = 20;
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](int P, int i, double c, double x) {
+        double arg = x - P / 2.0 + i;
+        arg /= P / 2.0;
+        double val = prolate0_eval_derivative(c, arg)*2.0/P;
+        return val;
+    };
+    int dof = P;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    std::cout << "spread der max_order estimated from cheb = " << max_order << std::endl;
+    if(max_order > MAX_MONO_ORDER) {
+        std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        max_order = MAX_MONO_ORDER;
+    }
+    // now actually construct the mono coeffs with order max_order
+    if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+    int nnodes = (int)max_order*1.75;
+    std::cout << "nnodes = " << nnodes << std::endl;
+    //monomial_nodes_1d(nnodes, nodes, 0, 1);
+    cheb_nodes_1d(nnodes, nodes, 0, 1);
+    fn_v.resize(dof * nnodes);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < nnodes; i++) {
+            fn_v[idof * nnodes + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+    std::cout << "spread der dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+}
+
+void spread_window_real_space_der_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+    prolc180(tol, c);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](int P, int i, double c, double x) {
+        double arg = x - P / 2.0 + i;
+        arg /= P / 2.0;
+        double val = prolate0_eval_derivative(c, arg)*2.0/P;
+        return val;
+    };
+    int dof = P;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
+void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+    prolc180(tol, c);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](int P, int i, double c, double x) {
+        double arg = x - P / 2.0 + i;
+        arg /= P / 2.0;
+        double val = prolate0_eval(c, arg);
+        return val;
+    };
+    int dof = P;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    std::cout << "spread max_order estimated from cheb = " << max_order << std::endl;
+    if(max_order > MAX_MONO_ORDER) {
+        std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        max_order = MAX_MONO_ORDER;
+    }
+    // now actually construct the mono coeffs with order max_order
+    if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+    int nnodes = (int)max_order*1.75;
+    std::cout << "nnodes = " << nnodes << std::endl;
+    //monomial_nodes_1d(nnodes, nodes, 0, 1);
+    cheb_nodes_1d(nnodes, nodes, 0, 1);
+    fn_v.resize(dof * nnodes);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < nnodes; i++) {
+            fn_v[idof * nnodes + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+    std::cout << "spread dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+}
+
+void spread_window_real_space_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+    prolc180(tol, c);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](int P, int i, double c, double x) {
+        double arg = x - P / 2.0 + i;
+        arg /= P / 2.0;
+        double val = prolate0_eval(c, arg);
+        return val;
+    };
+    int dof = P;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(P, idof, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
+void spread_window_real_space(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+    prolc180(tol, c);
+
+    int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
     cheb_nodes_1d(order, nodes);
 
@@ -1223,8 +1617,9 @@ void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<dou
         lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
     }
     lambda /= prolate0_eval(c, 0.5);
+    std::cout << "spread window fourier lambda = " << lambda << std::endl;
 
-    int order = 20;
+    int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
     cheb_nodes_1d(order, nodes);
 
@@ -1271,13 +1666,59 @@ void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<dou
     }
 }
 
-void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
-    double c;
+void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0) {
     prolc180(tol, c);
 
-    double c0 = prolate0_int_eval(c, 1.0);
+    c0 = prolate0_int_eval(c, 1.0);
 
-    int order = 20;
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        double val = prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
+void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0) {
+    prolc180(tol, c);
+
+    c0 = prolate0_int_eval(c, 1.0);
+
+    int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
     cheb_nodes_1d(order, nodes);
 
@@ -1325,13 +1766,63 @@ void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>&
     }
 }
 
+void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
+    double c;
+    prolc180(tol, c);
+
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        //double val = prolate0_int_eval(c, x) / c0 - x / c0 * prolate0_eval(c, x);
+        //val = 1 - val;
+        double val = x / c0 * prolate0_eval(c, x) - prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
 void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
     double c;
     prolc180(tol, c);
 
     double c0 = prolate0_int_eval(c, 1.0);
 
-    int order = 20;
+    int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
     cheb_nodes_1d(order, nodes);
 
@@ -1379,7 +1870,7 @@ void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& 
     }
 }
 
-void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
+void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda) {
     double c;
     prolc180(tol, c);
 
@@ -1388,13 +1879,70 @@ void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVecto
     int quad_npts = 200;
     AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
     gaussian_quadrature(quad_npts, xs.data(), ws.data());
-    double lambda = 0.0;
+    lambda = 0.0;
     for (int i = 0; i < quad_npts; i++) {
         lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
     }
     lambda /= prolate0_eval(c, 0.5);
 
-    int order = 20;
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double lambda, double c, double c0, double x) {
+        double val = lambda * prolate0_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(lambda, c, c0, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
+void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda) {
+    double c;
+    prolc180(tol, c);
+
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int quad_npts = 200;
+    AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
+    gaussian_quadrature(quad_npts, xs.data(), ws.data());
+    lambda = 0.0;
+    for (int i = 0; i < quad_npts; i++) {
+        lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
+    }
+    lambda /= prolate0_eval(c, 0.5);
+
+    int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
     cheb_nodes_1d(order, nodes);
 
@@ -1439,6 +1987,175 @@ void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVecto
             mono_coeff_filtered[i * max_order + j] = mono_coeff[i * order + j];
         }
     }
+}
+
+void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0, double& psi0) {
+    prolc180(tol, c);
+
+    c0 = prolate0_int_eval(c, 1.0);
+    psi0 = prolate0_eval(c, 0.0);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        double val = prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
+void splitting_function(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0, double& psi0) {
+    prolc180(tol, c);
+
+    c0 = prolate0_int_eval(c, 1.0);
+    psi0 = prolate0_eval(c, 0.0);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        double val = prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    AlignedVector<double> max_coeffs(dof, 0.0);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            max_coeffs[idof] =
+                std::max<double>(max_coeffs[idof], std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) < tol_coeff * max_coeffs[idof]) {
+                cheb_coeff[idof * order + i] = 0;
+            } else {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<double> mono_coeff;
+    cheb2mono(order, dof, cheb_coeff, mono_coeff);
+
+    AlignedVector<double>& mono_coeff_filtered = coeffs;
+    if (mono_coeff_filtered.size() != dof * max_order) mono_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            mono_coeff_filtered[i * max_order + j] = mono_coeff[i * order + j];
+        }
+    }
+}
+
+double spread_window_ref(double c, int P, int i, double x) {
+    double arg = x - P / 2.0 + i;
+    arg /= P / 2.0;
+    if(std::abs(arg) > 1) {
+        return 0;
+    }
+    double val = prolate0_eval(c, arg);
+    return val;
+}
+
+double spread_window_der_ref(double c, int P, int i, double x) {
+    double arg = x - P / 2.0 + i;
+    arg /= P / 2.0;
+    double val = prolate0_eval_derivative(c, arg)*2.0/P;
+    return val;
+}
+
+double spread_window_fourier_ref(double c, double x) {
+    int quad_npts = 200;
+    AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
+    gaussian_quadrature(quad_npts, xs.data(), ws.data());
+    double lambda = 0.0;
+    for (int i = 0; i < quad_npts; i++) {
+        lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
+    }
+    lambda /= prolate0_eval(c, 0.5);
+
+    if (std::abs(x) > 1) {
+        return 0;
+    }
+
+    double val = lambda * prolate0_eval(c, x);
+    return val;
+}
+
+double splitting_function_fourier_space_ref(double c, double c0, double lambda, double x) {
+
+    if (std::abs(x) > 1) {
+        return 0;
+    }
+
+    /*
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int quad_npts = 200;
+    AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
+    gaussian_quadrature(quad_npts, xs.data(), ws.data());
+    double lambda = 0.0;
+    for (int i = 0; i < quad_npts; i++) {
+        lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
+    }
+    lambda /= prolate0_eval(c, 0.5);
+    */
+
+    double val = lambda * prolate0_eval(c, x) / c0;
+    return val;
+}
+
+double splitting_function_real_space_ref(double c, double c0, double x) {
+    if (std::abs(x) > 1) {
+        return 1.0;
+    }
+    //c0 = prolate0_int_eval(c, 1.0);
+
+    double val = prolate0_int_eval(c, x) / c0;
+    return val;
 }
 // end of approximation functions
 

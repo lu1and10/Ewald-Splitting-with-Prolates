@@ -59,6 +59,7 @@
 #include "gromacs/simd/simd.h"
 
 #include "atomdata.h"
+#include <iostream>
 
 namespace gmx
 {
@@ -126,6 +127,27 @@ private:
     const real selfEnergy_;
 };
 
+inline static SimdReal cheb_eval(const SimdReal& x, int order, const real* coeff) {
+    if (order == 0) return SimdReal(0.0);
+    if (order == 1) return SimdReal(coeff[0]);
+
+    // Transform x from [a,b] to [-1,1]
+    SimdReal y = SimdReal(2.0) * x - SimdReal(1.0);
+    SimdReal y2 = SimdReal(2.0) * y;
+
+    SimdReal b0(0.0);
+    SimdReal b1(0.0);
+    SimdReal b2(0.0);
+
+    for (int i = order - 1; i > 0; --i) {
+        b2 = b1;
+        b1 = b0;
+        b0 = SimdReal(coeff[i]) + y2 * b1 - b2;
+    }
+
+    return SimdReal(coeff[0]) + b0 * y - b1;
+}
+
 //! Specialized calculator for Ewald using an analytic approximation
 template<>
 class CoulombCalculator<KernelCoulombType::EwaldAnalytical>
@@ -134,7 +156,12 @@ public:
     inline CoulombCalculator(const interaction_const_t& ic) :
         beta_(ic.ewaldcoeff_q),
         betaSquared_(ic.ewaldcoeff_q * ic.ewaldcoeff_q),
-        selfEnergy_(0.5_real * ic.ewaldcoeff_q * M_2_SQRTPI) // beta/sqrt(pi)
+        selfEnergy_(0.5_real * ic.pswfcoeff_psi0/(ic.pswfcoeff_c0 * ic.rcoulomb)), // beta/sqrt(pi)
+        //selfEnergy_(0.5_real * ic.ewaldcoeff_q * M_2_SQRTPI) // beta/sqrt(pi),
+        pswf_c0_(ic.pswfcoeff_c0),
+        pswf_psi0_(ic.pswfcoeff_psi0),
+        rcoulomb_(ic.rcoulomb),
+        ic_(ic)
     {
     }
 
@@ -143,16 +170,26 @@ public:
 
     template<int nR>
     gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>&            rSquaredV,
-                                              const std::array<SimdReal, nR> gmx_unused& dummyRInvV,
+                                              //const std::array<SimdReal, nR> gmx_unused& dummyRInvV,
+                                              const std::array<SimdReal, nR>             rInvV,
                                               const std::array<SimdReal, nR>&            rInvExclV,
                                               const std::array<SimdBool, nR>& withinCutoffV)
     {
+        const auto rdivrc = genArr<nR>(
+                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
+
+        const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+
+        return  genArr<nR>([&](int i) { return fma(ewcorrV[i], rInvV[i], rInvExclV[i]); });
+
+        /*
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 
         const auto ewcorrV = genArr<nR>([&](int i) { return beta_ * pmeForceCorrection(brsqV[i]); });
 
         return genArr<nR>([&](int i) { return fma(ewcorrV[i], brsqV[i], rInvExclV[i]); });
+        */
     }
 
     //! Computes the Coulomb force and the correction energy for the Ewald reciprocal part
@@ -164,6 +201,18 @@ public:
                                              std::array<SimdReal, nR>&         forceV,
                                              std::array<SimdReal, energySize>& correctionEnergyV)
     {
+        const auto rdivrc = genArr<nR>(
+                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
+
+        const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+
+        forceV =  genArr<nR>([&](int i) { return fma(ewcorrV[i], rInvV[i], rInvExclV[i]); });
+
+
+        correctionEnergyV =
+                genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_energy.size(), ic_.pswfPolynomials->pswf_long_range_energy.data()) * rInvV[i]; });
+
+        /*
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 
@@ -175,6 +224,7 @@ public:
                 genArr<nR>([&](int i) { return beta_ * pmePotentialCorrection(brsqV[i]); });
 
         GMX_UNUSED_VALUE(rInvV);
+        */
     }
 
 private:
@@ -184,6 +234,14 @@ private:
     const SimdReal betaSquared_;
     //! The self energy of the reciprocal part
     const real selfEnergy_;
+    //! pswf c0
+    const SimdReal pswf_c0_;
+    //! pswf psi0
+    const SimdReal pswf_psi0_;
+    //! pswf rcoulomb
+    const SimdReal rcoulomb_;
+    //! Interaction constants
+    const interaction_const_t& ic_;
 };
 
 //! Specialized calculator for Ewald using tabulated functions

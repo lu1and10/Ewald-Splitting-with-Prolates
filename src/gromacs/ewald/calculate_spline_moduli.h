@@ -45,4 +45,6 @@ std::array<std::vector<real>, 3> make_bspline_moduli(int nx, int ny, int nz, int
 /* Calculate the P3M B-spline moduli */
 std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz, int order);
 
+/* Calculate the PSWF moduli */
+std::array<std::vector<real>, 3> make_pswf_moduli(int nx, int ny, int nz, int order, double c, int poly_order, double poly_coeff[]);
 #endif

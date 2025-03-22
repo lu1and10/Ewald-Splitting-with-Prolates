@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <iostream>
 
 #include "kernels_reference/kernel_gpu_ref.h"
 
@@ -224,6 +225,7 @@ static void nbnxn_kernel_cpu(const PairlistSet&             pairlistSet,
             kernelSetup.kernelType, nbatParams.ljCombinationRule, ic.vdwtype, ic.vdw_modifier, ic.ljpme_comb_rule);
 
     const bool usingSimdKernel = kernelTypeIsSimd(kernelSetup.kernelType);
+    //std::cout << "usingSimdKernel: " << usingSimdKernel << std::endl;
 
     gmx::ArrayRef<const NbnxnPairlistCpu> pairlists = pairlistSet.cpuLists();
 
@@ -256,6 +258,7 @@ static void nbnxn_kernel_cpu(const PairlistSet&             pairlistSet,
 
         if (!stepWork.computeEnergy)
         {
+            //std::cout<<"no energy"<<std::endl;
             /* Don't calculate energies */
             switch (kernelSetup.kernelType)
             {
@@ -282,6 +285,7 @@ static void nbnxn_kernel_cpu(const PairlistSet&             pairlistSet,
         }
         else if (out.Vvdw.size() == 1)
         {
+            //std::cout<<"single energy"<<std::endl;
             /* A single energy group (pair) */
 
             if (usingSimdKernel)
@@ -296,17 +300,27 @@ static void nbnxn_kernel_cpu(const PairlistSet&             pairlistSet,
 
             switch (kernelSetup.kernelType)
             {
-                case NbnxmKernelType::Cpu4x4_PlainC:
+                case NbnxmKernelType::Cpu4x4_PlainC:{
+                    //std::cout<<"cpu4x4"<<std::endl;
                     nbnxn_kernel_4x4_ener_ref[coulkt][vdwkt](pairlist, nbat, &ic, shiftVecPointer, &out);
+                    }
                     break;
 #if GMX_HAVE_NBNXM_SIMD_2XMM
-                case NbnxmKernelType::Cpu4xN_Simd_2xNN:
+                case NbnxmKernelType::Cpu4xN_Simd_2xNN:{
+                    //std::cout<<"cpu4xnsimd4x4"<<std::endl;
                     gmx::nbnxmKernelEnerSimd2xmm[coulkt][vdwkt](pairlist, nbat, &ic, shiftVecPointer, &out);
+                    }
                     break;
 #endif
 #if GMX_HAVE_NBNXM_SIMD_4XM
-                case NbnxmKernelType::Cpu4xN_Simd_4xN:
+                case NbnxmKernelType::Cpu4xN_Simd_4xN:{
+                    /*
+                    std::cout<<"cpu4xnsimd4xm"<<std::endl;
+                    std::cout<<"coulkt: "<<coulkt<<std::endl;
+                    std::cout<<"vdwkt: "<<vdwkt<<std::endl;
+                    */
                     gmx::nbnxmKernelEnerSimd4xm[coulkt][vdwkt](pairlist, nbat, &ic, shiftVecPointer, &out);
+                }
                     break;
 #endif
                 case NbnxmKernelType::Cpu1x1_PlainC:

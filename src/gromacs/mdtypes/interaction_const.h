@@ -104,6 +104,7 @@ struct PSWF_Polynomials
     AlignedVector<double> pswf_long_range_energy;
     AlignedVector<double> pswf_long_range_force;
     AlignedVector<double> pswf_split_fun_fourier;
+    AlignedVector<double> pswf_split_fun;
 };
 
 /* The physical interaction parameters for non-bonded interaction calculations
@@ -166,6 +167,11 @@ struct interaction_const_t
     real rcoulomb_switch = 0;
 
     /* PME/Ewald */
+    real ewald_rtol    = 0;
+    real pswfcoeff_q   = 0;
+    real pswfcoeff_c0  = 0;
+    real pswfcoeff_psi0  = 0;
+    //real pswfcoeff_lambda = 0;
     real ewaldcoeff_q  = 0;
     real ewaldcoeff_lj = 0;
     LongRangeVdW ljpme_comb_rule = LongRangeVdW::Geom; /* LJ combination rule for the LJ PME mesh part */

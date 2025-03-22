@@ -114,10 +114,28 @@ static void initCoulombEwaldParameters(FILE*                fp,
     }
 
     ic->ewaldcoeff_q = calc_ewaldcoeff_q(ir.rcoulomb, ir.ewald_rtol);
+    std::cout<<"ewaldcoeff_q: "<<ic->ewaldcoeff_q<<std::endl;
+    ic->ewald_rtol = ir.ewald_rtol;
+
     /* init the pswf ewald polynormials used in short range table generation */
-    long_range_real_energy(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_long_range_energy);
-    long_range_real_force(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_long_range_force);
-    splitting_function_fourier_space(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_split_fun_fourier);
+    double pswf_c = 0.0, pswf_c0 = 0.0, psi0 = 0.0;
+    double coeff_filter_tol = 1.0;
+    long_range_real_energy_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol*1e-3, ic->pswfPolynomials->pswf_long_range_energy, pswf_c, pswf_c0);
+    //ic->pswfcoeff_q = pswf_c;
+    //ic->pswfcoeff_c0 = pswf_c0;
+    long_range_real_force_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol, ic->pswfPolynomials->pswf_long_range_force);
+
+    splitting_function_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol, ic->pswfPolynomials->pswf_split_fun, pswf_c, pswf_c0, psi0);
+    ic->pswfcoeff_q = pswf_c;
+    ic->pswfcoeff_c0 = pswf_c0;
+    ic->pswfcoeff_psi0 = psi0;
+    std::cout<<"splitting pswfcoeff_q: "<<ic->pswfcoeff_q<<std::endl;
+    std::cout<<"splitting pswfcoeff_c0: "<<ic->pswfcoeff_c0<<std::endl;
+    std::cout<<"splitting pswfcoeff_psi0: "<<ic->pswfcoeff_psi0<<std::endl;
+    //double lambda0 = 0.0;
+    //splitting_function_fourier_space(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_split_fun_fourier, lambda0);
+    //ic->pswfcoeff_lambda = lambda0;
+
     if (fp)
     {
         fprintf(fp, "Using a Gaussian width (1/beta) of %g nm for Ewald\n", 1 / ic->ewaldcoeff_q);

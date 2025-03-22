@@ -1658,7 +1658,7 @@ void check_ir(const char*                    mdparin,
     {
         // TODO: Move these checks into the ewald module with the options class
         int orderMin = 3;
-        int orderMax = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 12);
+        int orderMax = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 16);
 
         if (ir->pme_order < orderMin || ir->pme_order > orderMax)
         {

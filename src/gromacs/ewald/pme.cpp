@@ -82,6 +82,9 @@
 #include <list>
 #include <tuple>
 #include <utility>
+#include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #include "gromacs/domdec/domdec.h"
 #include "gromacs/ewald/ewald_utils.h"
@@ -795,10 +798,36 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     pme->ewaldcoeff_q  = ewaldcoeff_q;
     pme->ewaldcoeff_lj = ewaldcoeff_lj;
 
-    /* pme spread polynomials*/
-    spread_window_real_space(pme->pme_order, ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf);
-    spread_window_fourier_space(ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf_fourier);
-    // spread_window_real_space_derivative(ir->ewald_rtol, ir->ewald_rtol, pme->spread_pswf_derivative);
+    /* pme spread polynomials setup */
+    double pswf_c = 0.0;
+    double tol_spread=ir->ewald_rtol;
+    double tol_spread_coeff=tol_spread*1.0e-0;
+    //spread_window_real_space_cheb(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf, pswf_c);
+    spread_window_real_space_mono(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf, pswf_c);
+    pme->pswf_spread_coeff_q = pswf_c;
+    int ncoeffs = pme->spread_pswf.size()/pme->pme_order;
+    std::cout << "pme_order: " << pme->pme_order << std::endl;
+    std::cout << "ewald_rtol: " << ir->ewald_rtol << std::endl;
+    std::cout << "pswf_c spread: " << pswf_c << std::endl;
+    std::cout << "spread approximation number of coeffs: " << ncoeffs << std::endl;
+    // can be one degree less than spread_pswf, what does this mean ???
+    //spread_window_real_space_der_cheb(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf_derivative, pswf_c);
+    spread_window_real_space_der_mono(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf_derivative, pswf_c);
+    spread_window_fourier_space(tol_spread, tol_spread_coeff, pme->spread_pswf_fourier);
+
+    /* splitting polynomials setup */
+    pme->pswf_rcoulomb = ir->rcoulomb;
+    double pswf_split_c = 0.0, pswf_split_c0 = 0.0, pswf_split_psi0 = 0.0;
+    double tol_split_coeff = ir->ewald_rtol*1.0e-0;
+    splitting_function_cheb(ir->ewald_rtol, tol_split_coeff, pme->pswf_split_fun, pswf_split_c, pswf_split_c0, pswf_split_psi0);
+    pme->pswf_split_coeff_q = pswf_split_c;
+    pme->pswf_split_c0 = pswf_split_c0;
+    pme->pswf_split_psi0 = pswf_split_psi0;
+    std::cout<<"pme init splitting pswfcoeff_psi0: "<<pme->pswf_split_psi0<<std::endl;
+    double pswf_split_lambda0 = 0.0;
+    splitting_function_fourier_space_cheb(ir->ewald_rtol, tol_split_coeff, pme->pswf_split_fun_fourier, pswf_split_lambda0);
+    pme->pswf_split_lambda = pswf_split_lambda0;
+    std::cout<<"pme init splitting pswf_split_lambda0: "<<pme->pswf_split_lambda<<std::endl;
 
     /* Always constant electrostatics coefficients */
     pme->epsilon_r = ir->epsilon_r;
@@ -1018,7 +1047,8 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     if (!pme->bP3M)
     {
         /* Use plain SPME B-spline interpolation */
-        pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);
+        //pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);
+        pme->bsp_mod = make_pswf_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order, pswf_c, pme->spread_pswf_fourier.size(), pme->spread_pswf_fourier.data());
     }
     else
     {

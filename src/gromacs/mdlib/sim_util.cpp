@@ -50,6 +50,9 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <iostream>
+#include <fstream>
+#include <iomanip>
 
 #include "gromacs/applied_forces/awh/awh.h"
 #include "gromacs/domdec/dlbtiming.h"
@@ -1756,7 +1759,9 @@ void do_force(FILE*                         fplog,
         /* launch local nonbonded work on GPU */
         wallcycle_start_nocount(wcycle, WallCycleCounter::LaunchGpuPp);
         wallcycle_sub_start_nocount(wcycle, WallCycleSubCounter::LaunchGpuNonBonded);
+        //std::cout << "Launch local nonbonded tasks on GPU" << std::endl;
         do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::Local, enbvClearFNo, step, nrnb, wcycle);
+        //std::cout << "exit local nonbonded tasks on GPU" << std::endl;
         wallcycle_sub_stop(wcycle, WallCycleSubCounter::LaunchGpuNonBonded);
         wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPp);
     }
@@ -1861,7 +1866,9 @@ void do_force(FILE*                         fplog,
             /* launch non-local nonbonded tasks on GPU */
             wallcycle_start_nocount(wcycle, WallCycleCounter::LaunchGpuPp);
             wallcycle_sub_start(wcycle, WallCycleSubCounter::LaunchGpuNonBonded);
+            //std::cout << "Launch non-local nonbonded tasks on GPU" << std::endl;
             do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::NonLocal, enbvClearFNo, step, nrnb, wcycle);
+            //std::cout << "exit non-local nonbonded tasks on GPU" << std::endl;
             wallcycle_sub_stop(wcycle, WallCycleSubCounter::LaunchGpuNonBonded);
             wallcycle_stop(wcycle, WallCycleCounter::LaunchGpuPp);
         }
@@ -2014,10 +2021,18 @@ void do_force(FILE*                         fplog,
 
     const bool useOrEmulateGpuNb = simulationWork.useGpuNonbonded || fr->nbv->emulateGpu();
 
+    //double energy_sr_and_lr = 0.0;
     if (!useOrEmulateGpuNb)
     {
         wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
+        /*
+        std::cout << "energy ngroup: " << enerd->grpp.nener << std::endl;
+        std::cout << std::scientific << std::setprecision(16);
+        std::cout << "entering do_nb_verlet, energy before: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
+        */
         do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::Local, enbvClearFYes, step, nrnb, wcycle);
+        //std::cout << "exiting do_nb_verlet, energy after: " <<  enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
+        //energy_sr_and_lr = enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0];
         wallcycle_stop(wcycle, WallCycleCounter::Force);
     }
 
@@ -2028,11 +2043,13 @@ void do_force(FILE*                         fplog,
     }
 
     wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
+    //std::cout << "before entering computing free energy kernels" << std::endl;
     if (fr->efep != FreeEnergyPerturbationType::No && stepWork.computeNonbondedForces)
     {
         /* Calculate the local and non-local free energy interactions here.
          * Happens here on the CPU both with and without GPU.
          */
+        //std::cout << "computing free energy kernels" << std::endl;
         nbv->dispatchFreeEnergyKernels(x,
                                        &forceOutNonbonded->forceWithShiftForces(),
                                        fr->use_simd_kernels,
@@ -2053,9 +2070,12 @@ void do_force(FILE*                         fplog,
 
     if (stepWork.computeNonbondedForces && !useOrEmulateGpuNb)
     {
+        //std::cout << "stepWork.computeNonbondedForces" << std::endl;
         if (simulationWork.havePpDomainDecomposition)
         {
+            //std::cout << "entering do_nb_verlet have pp domain decomp" << std::endl;
             do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::NonLocal, enbvClearFNo, step, nrnb, wcycle);
+            //std::cout << "exit do_nb_verlet have pp domain decomp" << std::endl;
         }
 
         if (stepWork.computeForces)
@@ -2064,10 +2084,33 @@ void do_force(FILE*                         fplog,
              * This can be split into a local and a non-local part when overlapping
              * communication with calculation with domain decomposition.
              */
+            //std::cout << "adding forces" << std::endl;
+            //int fsize = forceOutNonbonded->forceWithShiftForces().force().size();
             wallcycle_stop(wcycle, WallCycleCounter::Force);
             nbv->atomdata_add_nbat_f_to_f(AtomLocality::All,
                                           forceOutNonbonded->forceWithShiftForces().force());
             wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
+            /*
+            std::ofstream fout("./force_shortrange_pswf.txt", std::ios::out);
+            fout << std::scientific << std::setprecision(16);
+            std::cout << std::scientific << std::setprecision(16);
+            for(int iforce = 0; iforce < fsize; iforce++)
+            {
+                for(int idim = 0; idim < 3; idim++)
+                {
+                    fout << forceOutNonbonded->forceWithShiftForces().force()[iforce][idim] << std::endl;
+                }
+            }
+            std::cout << "short range first force: " <<
+            forceOutNonbonded->forceWithShiftForces().force()[0][0] << " " <<
+            forceOutNonbonded->forceWithShiftForces().force()[0][1] << " " <<
+            forceOutNonbonded->forceWithShiftForces().force()[0][2] << std::endl;
+            std::cout << "short range last force: " <<
+            forceOutNonbonded->forceWithShiftForces().force()[fsize-1][0] << " " <<
+            forceOutNonbonded->forceWithShiftForces().force()[fsize-1][1] << " " <<
+            forceOutNonbonded->forceWithShiftForces().force()[fsize-1][2] << std::endl;
+            fout.close();
+            */
         }
 
         /* If there are multiple fshift output buffers we need to reduce them */
@@ -2154,6 +2197,7 @@ void do_force(FILE*                         fplog,
 
     if (stepWork.computeSlowForces)
     {
+        //std::cout<< "pme start, energy before: "<<  enerd->term[F_COUL_RECIP] << std::endl;
         longRangeNonbondeds->calculate(fr->pmedata,
                                        cr,
                                        x.unpaddedConstArrayRef(),
@@ -2164,6 +2208,16 @@ void do_force(FILE*                         fplog,
                                        dipoleData.muStateAB,
                                        stepWork,
                                        ddBalanceRegionHandler);
+        /*
+        std::cout<< "pme end, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        energy_sr_and_lr += enerd->term[F_COUL_RECIP];
+        std::cout << "energy sr and lr: " << energy_sr_and_lr << std::endl;
+        std::ofstream fout("./energy_sr_lr_pswf.txt", std::ios::out);
+        fout << std::scientific << std::setprecision(16);
+        fout << energy_sr_and_lr << std::endl;
+        fout.close();
+        exit(0);
+        */
     }
 
     wallcycle_stop(wcycle, WallCycleCounter::Force);
@@ -2285,8 +2339,10 @@ void do_force(FILE*                         fplog,
             else
             {
                 wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
+                //std::cout << "entering do_nb_verlet use or emulate gpu nb" << std::endl;
                 do_nb_verlet(
                         fr, ic, enerd, stepWork, InteractionLocality::NonLocal, enbvClearFYes, step, nrnb, wcycle);
+                //std::cout << "exit do_nb_verlet use or emulate gpu nb" << std::endl;
                 wallcycle_stop(wcycle, WallCycleCounter::Force);
             }
 
@@ -2466,6 +2522,7 @@ void do_force(FILE*                         fplog,
         // NOTE: emulation kernel is not included in the balancing region,
         // but emulation mode does not target performance anyway
         wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
+        //std::cout << "entering do_nb_verlet emulate gpu" << std::endl;
         do_nb_verlet(fr,
                      ic,
                      enerd,
@@ -2475,6 +2532,7 @@ void do_force(FILE*                         fplog,
                      step,
                      nrnb,
                      wcycle);
+        //std::cout << "exit do_nb_verlet emulate gpu" << std::endl;
         wallcycle_stop(wcycle, WallCycleCounter::Force);
     }
 
@@ -2494,6 +2552,7 @@ void do_force(FILE*                         fplog,
                                simulationWork.useGpuPmePpCommunication,
                                stepWork.useGpuPmeFReduction,
                                wcycle);
+        //std::cout<< "pme receive force ener, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
     }
 
 

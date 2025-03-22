@@ -89,7 +89,7 @@ static const real lb_scale_factor_symm[] = { 2.0 / 64, 12.0 / 64, 30.0 / 64, 20.
  * An order larger than 12 should never be needed, even for test cases.
  * If needed it can be changed here.
  */
-#define PME_ORDER_MAX 12
+#define PME_ORDER_MAX 16
 
 
 /* Temporary suppression until these structs become opaque and don't live in
@@ -359,6 +359,12 @@ struct gmx_pme_t
     int  pme_order;
     real ewaldcoeff_q;  /* Ewald splitting coefficient for Coulomb */
     real ewaldcoeff_lj; /* Ewald splitting coefficient for r^-6 */
+    real pswf_spread_coeff_q;
+    real pswf_split_coeff_q;
+    real pswf_split_psi0;
+    real pswf_split_c0;
+    real pswf_split_lambda;
+    real pswf_rcoulomb;
     real epsilon_r;
     int  pmeGpuGridHalo = 0; /* Size of the grid halo region with PME GPU decomposition */
     real haloExtentForAtomDisplacement = .0; /* extent of halo region in nm to account for atom */
@@ -431,12 +437,18 @@ struct gmx_pme_t
     std::vector<PmeAtomComm> atc; /* Indexed on decomposition index */
     matrix                   recipbox;
     real                     boxVolume;
-    /* pswf splitting long range modes table */
-    std::vector<real> pswf_mod;
+    /* pswf splitting function modes table */
+    //std::vector<real> pswf_mod;
     /* spread pswf function polynomial coefficients */
     AlignedVector<double> spread_pswf;
     AlignedVector<double> spread_pswf_fourier;
     AlignedVector<double> spread_pswf_derivative;
+    /* split pswf function polynomial coefficients*/
+    //AlignedVector<double> pswf_long_range_energy;
+    //AlignedVector<double> pswf_long_range_force;
+    AlignedVector<double> pswf_split_fun_fourier;
+    AlignedVector<double> pswf_split_fun;
+
     // The B-spline moduli coefficients
     std::array<std::vector<real>, DIM> bsp_mod;
     /* Buffers to store data for local atoms for L-B combination rule

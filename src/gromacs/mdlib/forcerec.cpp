@@ -47,6 +47,7 @@
 #include <bitset>
 #include <filesystem>
 #include <memory>
+#include <iostream>
 
 #include "gromacs/commandline/filenm.h"
 #include "gromacs/domdec/domdec.h"
@@ -611,7 +612,11 @@ static void init_ewald_f_table(const interaction_const_t& ic,
     /* Get the Ewald table spacing based on Coulomb and/or LJ
      * Ewald coefficients and rtol.
      */
-    const real tableScale = ewald_spline3_table_scale(ic, useCoulombTable, useVdwTable);
+    // TODO: pswf estimate, next immediately
+    //const real tableScale = ewald_spline3_table_scale(ic, useCoulombTable, useVdwTable) * 5.0;
+    //const real tableScale = ewald_spline3_table_scale(ic, useCoulombTable, useVdwTable);
+    const real tableScale = ewald_spline3_table_scale_pswf(ic, useCoulombTable, useVdwTable);
+    std::cout << "actual table scale: " << tableScale << std::endl;
 
     const bool havePerturbedNonbondeds = (ic.softCoreParameters != nullptr);
 
@@ -630,8 +635,10 @@ static void init_ewald_f_table(const interaction_const_t& ic,
 
     if (useCoulombTable)
     {
-        *coulombTables =
-                generateEwaldCorrectionTables(tableSize, tableScale, ic.ewaldcoeff_q, v_q_ewald_lr);
+        //*coulombTables =
+                //generateEwaldCorrectionTables(tableSize, tableScale, ic.ewaldcoeff_q, v_q_ewald_lr);
+        *coulombTables = generatePSWFCorrectionTables(ic, tableSize, tableScale, ic.pswfcoeff_q, v_q_ewald_lr_pswf);
+        std::cout << "coulombTables->tableF.size() = " << coulombTables->tableF.size() << std::endl;
     }
 
     if (useVdwTable)

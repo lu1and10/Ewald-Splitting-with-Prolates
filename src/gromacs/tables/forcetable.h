@@ -199,10 +199,11 @@ double v_lj_ewald_lr(double beta, double r);
  * \param v_lr          Pointer to function calculating real-space grid contribution
  * \returns a set of Ewald correction tables
  */
-EwaldCorrectionTables generateEwaldCorrectionTablesPSWF(int    numPoints,
-                                                    double tableScaling,
-                                                    real   beta,
-                                                    real_space_grid_contribution_computer v_lr);
+EwaldCorrectionTables generatePSWFCorrectionTables(const interaction_const_t& ic,
+                                                   const int numPoints,
+                                                   const double tableScaling,
+                                                   const real   beta,
+                                                   real_space_grid_contribution_computer_pswf v_lr);
 
 /*! \brief Compute scaling for the Ewald quadratic spline tables.
  *

@@ -49,6 +49,8 @@
 #include "simd_lennardjones_functions.h"
 #include "simd_load_store_functions.h"
 
+#include <iostream>
+
 /*! \internal \file
  *
  * \brief
@@ -174,6 +176,14 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
                      const rvec*                shift_vec,
                      nbnxn_atomdata_output_t*   out)
 {
+    /*
+    std::cout<<"in simd kernel: "<<std::endl;
+    std::cout<<"coulombType: "<<static_cast<int>(coulombType)<<std::endl;
+    std::cout<<"vdwCutoffCheck: "<<static_cast<int>(vdwCutoffCheck)<<std::endl;
+    std::cout<<"ljCombinationRule: "<<static_cast<int>(ljCombinationRule)<<std::endl;
+    std::cout<<"vdwModifier: "<<static_cast<int>(vdwModifier)<<std::endl;
+    std::cout<<"ljEwald: "<<static_cast<int>(ljEwald)<<std::endl;
+    */
     constexpr int c_numJClustersPerSimdRegister = (kernelLayout == KernelLayout::r2xMM ? 2 : 1);
 
     constexpr int c_iClusterSize = sc_iClusterSize(kernelLayout);
@@ -190,6 +200,13 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
     /* The number of 'i' SIMD registers */
     static_assert(c_iClusterSize % c_numJClustersPerSimdRegister == 0);
     constexpr int nR = c_iClusterSize / c_numJClustersPerSimdRegister;
+    /*
+    std::cout << "nR: " << nR << std::endl;
+    std::cout << "c_iClusterSize: " << c_iClusterSize << std::endl;
+    std::cout << "c_jClusterSize: " << c_jClusterSize << std::endl;
+    std::cout << "c_numJClustersPerSimdRegister: " << c_numJClustersPerSimdRegister << std::endl;
+    std::cout << "simd width: " << GMX_SIMD_REAL_WIDTH << std::endl;
+    */
 
     constexpr bool haveVdwCutoffCheck = (vdwCutoffCheck != VdwCutoffCheck::No);
 
@@ -463,6 +480,7 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
         /* Currently all kernels use (at least half) LJ */
         if (half_LJ)
         {
+            //std::cout<<"half_LJ"<<std::endl;
             /* Coulomb: all i-atoms, LJ: first half i-atoms */
             constexpr bool            c_calculateCoulombInteractions = true;
             constexpr ILJInteractions c_iLJInteractions              = ILJInteractions::Half;
@@ -484,6 +502,7 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
         }
         else if (do_coul)
         {
+            //std::cout<<"do_coul, all col, all lj"<<std::endl;
             /* Coulomb: all i-atoms, LJ: all i-atoms */
             constexpr bool            c_calculateCoulombInteractions = true;
             constexpr ILJInteractions c_iLJInteractions              = ILJInteractions::All;
@@ -505,6 +524,7 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
         }
         else
         {
+            //std::cout<<"no_coul, all lj"<<std::endl;
             /* Coulomb: none, LJ: all i-atoms */
             constexpr bool            c_calculateCoulombInteractions = false;
             constexpr ILJInteractions c_iLJInteractions              = ILJInteractions::All;
@@ -543,6 +563,7 @@ void nbnxmKernelSimd(const NbnxnPairlistCpu*    nbl,
 
         if constexpr (sc_calculateShiftForces)
         {
+            //std::cout << "compute shift forces" << std::endl;
             fshift[ish3 + 0] += fShiftX;
             fshift[ish3 + 1] += fShiftY;
             fshift[ish3 + 2] += fShiftZ;

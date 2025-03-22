@@ -276,7 +276,6 @@ static std::vector<real> make_pswf_moduli_dim(int n, int order, double c, int po
 /* Calculate the P3M B-spline moduli */
 std::array<std::vector<real>, 3> make_pswf_moduli(int nx, int ny, int nz, int order, double c, int poly_order, double poly_coeff[])
 {
-    std::cout << "make_pswf_moduli" << std::endl;
     std::array<std::vector<real>, 3> bsp_mod;
 
     //std::cout << "nx: " << nx << " order: " << order << " c: " << c << " poly_order: " << poly_order << std::endl;

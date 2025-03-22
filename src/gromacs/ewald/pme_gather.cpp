@@ -324,11 +324,11 @@ void gather_f_bsplines(const gmx_pme_t*          pme,
     /* Note that unrolling this loop by templating this function on order
      * deteriorates performance significantly with gcc5/6/7.
      */
-    /*
+    #ifdef MYDEBUGPRINT
     std::ofstream fout("./force_longrange_pswf.txt", std::ios::out);
     fout << std::scientific << std::setprecision(16);
     std::cout << std::scientific << std::setprecision(16);
-    */
+    #endif
     for (int nn = 0; nn < spline->n; nn++)
     {
         const int  n           = spline->ind[nn];
@@ -355,14 +355,16 @@ void gather_f_bsplines(const gmx_pme_t*          pme,
             force[n][XX] += -coefficient * (f[XX] * nx * rxx);
             force[n][YY] += -coefficient * (f[XX] * nx * ryx + f[YY] * ny * ryy);
             force[n][ZZ] += -coefficient * (f[XX] * nx * rzx + f[YY] * ny * rzy + f[ZZ] * nz * rzz);
-            //fout << force[n][XX] << "\n" << force[n][YY] << "\n" << force[n][ZZ] << std::endl; 
+            #ifdef MYDEBUGPRINT
+            fout << force[n][XX] << "\n" << force[n][YY] << "\n" << force[n][ZZ] << std::endl; 
+            #endif
         }
     }
-    /*
+    #ifdef MYDEBUGPRINT
     std::cout << "long range first force: " << force[0][XX] << " " << force[0][YY] << " " << force[0][ZZ] << std::endl;
     std::cout << "long range last force: " << force[spline->n-1][XX] << " " << force[spline->n-1][YY] << " " << force[spline->n-1][ZZ] << std::endl;
     fout.close();
-    */
+    #endif
     //exit(0);
     /* Since the energy and not forces are interpolated
      * the net force might not be exactly zero.

@@ -1047,8 +1047,13 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     if (!pme->bP3M)
     {
         /* Use plain SPME B-spline interpolation */
-        //pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);
+        #ifdef MYDEBUGUSEBSPLINE
+        std::cout << "Using B-spline spread, building window function moduli" << std::endl;
+        pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);
+        #else
+        std::cout << "Using pswf spread, building window function moduli" << std::endl;
         pme->bsp_mod = make_pswf_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order, pswf_c, pme->spread_pswf_fourier.size(), pme->spread_pswf_fourier.data());
+        #endif
     }
     else
     {

@@ -453,7 +453,9 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
     //hz = 1.0/rzz/nz;
     //std::cout << "hx: " << hx << " hy: " << hy << " hz: " << hz << std::endl;
     hx = hy = hz = pme.pme_order/2.0;
-    //hx = hy = hz = 1.0;
+    #ifdef MYDEBUGUSEBSPLINE
+    hx = hy = hz = 1.0;
+    #endif
     //std::cout << "hx: " << hx << " hy: " << hy << " hz: " << hz << std::endl;
 
     GMX_ASSERT(rxx != 0.0, "Someone broke the reciprocal box again");

@@ -31,6 +31,7 @@
  * To help us fund GROMACS development, we humbly ask that you cite
  * the research papers on the package. Check out https://www.gromacs.org.
  */
+//#define MYDEBUGPRINT 1
 #include "gmxpre.h"
 
 #include "config.h"
@@ -2021,18 +2022,22 @@ void do_force(FILE*                         fplog,
 
     const bool useOrEmulateGpuNb = simulationWork.useGpuNonbonded || fr->nbv->emulateGpu();
 
-    //double energy_sr_and_lr = 0.0;
+    #ifdef MYDEBUGPRINT
+    double energy_sr_and_lr = 0.0;
+    #endif
     if (!useOrEmulateGpuNb)
     {
         wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
-        /*
+        #ifdef MYDEBUGPRINT
         std::cout << "energy ngroup: " << enerd->grpp.nener << std::endl;
         std::cout << std::scientific << std::setprecision(16);
         std::cout << "entering do_nb_verlet, energy before: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
-        */
+        #endif
         do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::Local, enbvClearFYes, step, nrnb, wcycle);
-        //std::cout << "exiting do_nb_verlet, energy after: " <<  enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
-        //energy_sr_and_lr = enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0];
+        #ifdef MYDEBUGPRINT
+        std::cout << "exiting do_nb_verlet, energy after: " <<  enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
+        energy_sr_and_lr = enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0];
+        #endif
         wallcycle_stop(wcycle, WallCycleCounter::Force);
     }
 
@@ -2084,13 +2089,15 @@ void do_force(FILE*                         fplog,
              * This can be split into a local and a non-local part when overlapping
              * communication with calculation with domain decomposition.
              */
-            //std::cout << "adding forces" << std::endl;
-            //int fsize = forceOutNonbonded->forceWithShiftForces().force().size();
+            #ifdef MYDEBUGPRINT
+            std::cout << "adding forces" << std::endl;
+            int fsize = forceOutNonbonded->forceWithShiftForces().force().size();
+            #endif
             wallcycle_stop(wcycle, WallCycleCounter::Force);
             nbv->atomdata_add_nbat_f_to_f(AtomLocality::All,
                                           forceOutNonbonded->forceWithShiftForces().force());
             wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
-            /*
+            #ifdef MYDEBUGPRINT
             std::ofstream fout("./force_shortrange_pswf.txt", std::ios::out);
             fout << std::scientific << std::setprecision(16);
             std::cout << std::scientific << std::setprecision(16);
@@ -2110,7 +2117,7 @@ void do_force(FILE*                         fplog,
             forceOutNonbonded->forceWithShiftForces().force()[fsize-1][1] << " " <<
             forceOutNonbonded->forceWithShiftForces().force()[fsize-1][2] << std::endl;
             fout.close();
-            */
+            #endif
         }
 
         /* If there are multiple fshift output buffers we need to reduce them */
@@ -2197,7 +2204,9 @@ void do_force(FILE*                         fplog,
 
     if (stepWork.computeSlowForces)
     {
-        //std::cout<< "pme start, energy before: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        #ifdef MYDEBUGPRINT
+        std::cout<< "pme start, energy before: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        #endif
         longRangeNonbondeds->calculate(fr->pmedata,
                                        cr,
                                        x.unpaddedConstArrayRef(),
@@ -2208,7 +2217,7 @@ void do_force(FILE*                         fplog,
                                        dipoleData.muStateAB,
                                        stepWork,
                                        ddBalanceRegionHandler);
-        /*
+        #ifdef MYDEBUGPRINT
         std::cout<< "pme end, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
         energy_sr_and_lr += enerd->term[F_COUL_RECIP];
         std::cout << "energy sr and lr: " << energy_sr_and_lr << std::endl;
@@ -2217,7 +2226,7 @@ void do_force(FILE*                         fplog,
         fout << energy_sr_and_lr << std::endl;
         fout.close();
         exit(0);
-        */
+        #endif
     }
 
     wallcycle_stop(wcycle, WallCycleCounter::Force);

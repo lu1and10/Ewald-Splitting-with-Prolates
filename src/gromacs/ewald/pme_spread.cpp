@@ -1090,7 +1090,7 @@ void spread_on_grid(const gmx_pme_t* pme,
 
             if (calculateSplines)
             {
-                if(false){
+                #ifdef MYDEBUGUSEBSPLINE
                 make_bsplines(spline->theta.coefficients,
                               spline->dtheta.coefficients,
                               pme->pme_order,
@@ -1099,8 +1099,8 @@ void spread_on_grid(const gmx_pme_t* pme,
                               spline->ind.data(),
                               atc->coefficient.data(),
                               computeAllSplineCoefficients);
-                }
-                else {
+                #else
+                // TODO libin: it's slow
                 make_pswfs(spline->theta.coefficients,
                            spline->dtheta.coefficients,
                            pme->pme_order,
@@ -1114,7 +1114,7 @@ void spread_on_grid(const gmx_pme_t* pme,
                            pme->spread_pswf.data(),
                            pme->spread_pswf_derivative.data(),
                            computeAllSplineCoefficients);
-                }
+                #endif
             }
 
             if (doSpreading)

@@ -50,6 +50,9 @@
 #ifndef GMX_EWALD_PME_INTERNAL_H
 #define GMX_EWALD_PME_INTERNAL_H
 
+//#define MYDEBUGPRINT 1
+//#define MYDEBUGUSEBSPLINE 1
+
 #include "config.h"
 
 #include <memory>

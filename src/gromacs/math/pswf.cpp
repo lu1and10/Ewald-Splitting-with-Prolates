@@ -2,7 +2,8 @@
 #include "gmxpre.h"
 
 #include "gromacs/math/pswf.h"
-
+#include "gromacs/simd/simd.h"
+//#include "gromacs/simd/simd_math.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -1339,6 +1340,18 @@ double prolate0_int_eval(double c, double r) {
 // end of prolate functions
 
 // start of approximation functions
+/* Returns the smallest number >= \p that is a multiple of \p factor, \p factor must be a power of 2 */
+template<unsigned int factor>
+static size_t roundUpToMultipleOfFactor(size_t number)
+{
+    static_assert(gmx::isPowerOfTwo(factor));
+
+    /* We need to add a most factor-1 and because factor is a power of 2,
+     * we get the result by masking out the bits corresponding to factor-1.
+     */
+    return (number + factor - 1) & ~(factor - 1);
+}
+
 void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
     prolc180(tol, c);
 
@@ -1383,8 +1396,14 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
         std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
         max_order = MAX_MONO_ORDER;
     }
+
     // now actually construct the mono coeffs with order max_order
-    if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+    constexpr int c_simdWidth = GMX_SIMD_REAL_WIDTH;
+    size_t padded_dof = roundUpToMultipleOfFactor<c_simdWidth>(dof);
+    coeffs.resize(padded_dof * max_order, 0.0);
+    //if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+
+    AlignedVector<double> coeffs_tmp(dof * max_order);
     int nnodes = (int)max_order*1.75;
     std::cout << "nnodes = " << nnodes << std::endl;
     //monomial_nodes_1d(nnodes, nodes, 0, 1);
@@ -1392,11 +1411,23 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
     fn_v.resize(dof * nnodes);
     for (int idof = 0; idof < dof; idof++) {
         for (int i = 0; i < nnodes; i++) {
-            fn_v[idof * nnodes + i] = f(P, idof, c, nodes[i]);
+            fn_v[idof * nnodes + i] = f(P, dof - idof - 1, c, nodes[i]);
         }
     }
     std::cout << "spread der dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
-    monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+    
+    //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
+
+    // copy coeffs_tmp to coeffs for simd eval
+    for (int i = 0; i < dof; i++) {
+        int iw = i/c_simdWidth;
+        int iw_rem = i%c_simdWidth;
+        int off_set = iw*c_simdWidth*max_order;
+        for (int j = 0; j < max_order; j++) {
+            coeffs[off_set+j*c_simdWidth+iw_rem] = coeffs_tmp[i * max_order + j];
+        }
+    }
 }
 
 void spread_window_real_space_der_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
@@ -1490,8 +1521,15 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
         std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
         max_order = MAX_MONO_ORDER;
     }
+
     // now actually construct the mono coeffs with order max_order
-    if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+    constexpr int c_simdWidth = GMX_SIMD_REAL_WIDTH;
+    size_t padded_dof = roundUpToMultipleOfFactor<c_simdWidth>(dof);
+    std::cout << "padded_dof = " << padded_dof << std::endl;
+    coeffs.resize(padded_dof * max_order, 0.0);
+    //if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
+
+    AlignedVector<double> coeffs_tmp(dof * max_order);
     int nnodes = (int)max_order*1.75;
     std::cout << "nnodes = " << nnodes << std::endl;
     //monomial_nodes_1d(nnodes, nodes, 0, 1);
@@ -1499,11 +1537,23 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
     fn_v.resize(dof * nnodes);
     for (int idof = 0; idof < dof; idof++) {
         for (int i = 0; i < nnodes; i++) {
-            fn_v[idof * nnodes + i] = f(P, idof, c, nodes[i]);
+            fn_v[idof * nnodes + i] = f(P, dof - idof - 1, c, nodes[i]);
         }
     }
     std::cout << "spread dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
-    monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+    
+    //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
+
+    // copy coeffs_tmp to coeffs for simd eval
+    for (int i = 0; i < dof; i++) {
+        int iw = i/c_simdWidth;
+        int iw_rem = i%c_simdWidth;
+        int off_set = iw*c_simdWidth*max_order;
+        for (int j = 0; j < max_order; j++) {
+            coeffs[off_set+j*c_simdWidth+iw_rem] = coeffs_tmp[i * max_order + j];
+        }
+    }
 }
 
 void spread_window_real_space_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {

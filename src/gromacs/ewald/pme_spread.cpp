@@ -54,7 +54,10 @@
 #include "pme_simd.h"
 #include "pme_spline_work.h"
 #include "gromacs/math/pswf.h"
+#include "gromacs/utility/arrayref.h"
 #include <iostream>
+
+using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
 
 /* TODO consider split of pme-spline from this file */
 
@@ -243,29 +246,78 @@ static void make_thread_local_ind(const PmeAtomComm* atc, int thread, splinedata
         }                                                                                        \
     }
 
-#define CALC_PSWF(order)                                                                         \
-    {                                                                                            \
-        for (int j = 0; (j < DIM); j++)                                                          \
-        {                                                                                        \
-            real dr;                                                                             \
-            real data[PME_ORDER_MAX];                                                            \
-            real data_der[PME_ORDER_MAX];                                                        \
-                                                                                                 \
-            /* dr is relative offset from lower cell limit */                                    \
-            dr = xptr[j];                                                                        \
-                                                                                                 \
-            for (int k = 0; k < (order); k++)                                                    \
-            {                                                                                    \
-                data[k] = mono_eval(poly_order, &pswf_coeff[k*poly_order], dr);                  \
-                data_der[k] = mono_eval(poly_order_der, &pswf_der_coeff[k*poly_order_der], dr);  \
-            }                                                                                    \
-                                                                                                 \
-            for (int k = 0; k < (order); k++)                                                    \
-            {                                                                                    \
-                theta[j][i * (order) + k] = data[order - k - 1];                                 \
-                dtheta[j][i * (order) + k] = data_der[order - k - 1];                            \
-            }                                                                                    \
-        }                                                                                        \
+/* Returns the smallest number >= \p that is a multiple of \p factor, \p factor must be a power of 2 */
+template<unsigned int factor>
+static size_t roundUpToMultipleOfFactor(size_t number)
+{
+    static_assert(gmx::isPowerOfTwo(factor));
+
+    /* We need to add a most factor-1 and because factor is a power of 2,
+     * we get the result by masking out the bits corresponding to factor-1.
+     */
+    return (number + factor - 1) & ~(factor - 1);
+}
+
+#define SIMD_POLY_EVAL(ns, poly_order, coeff, out, x)                                                                         \
+    {                                                                                                                         \
+        size_t padded_ns = roundUpToMultipleOfFactor<c_simdWidth>(ns);                                                        \
+        SimdReal x_simd = SimdReal(x);                                                                                        \
+        SimdReal result;                                                                                                      \
+        ArrayRef<const SimdReal> simd_coeff(coeff, coeff + roundUpToMultipleOfFactor<c_simdWidth>(padded_ns * (poly_order))); \
+        int icount = 0;                                                                                                       \
+        for (int iw = 0; iw < (ns); iw += c_simdWidth) {                                                                      \
+            result = simd_coeff[icount++];                                                                                    \
+            for (int ic = 1; ic < (poly_order); ic++, icount++) {                                                             \
+                result = fma(x_simd, result, simd_coeff[icount]);                                                             \
+            }                                                                                                                 \
+            store(out + iw, result);                                                                                          \
+        }                                                                                                                     \
+    }                                                                                                                         \
+
+#define CALC_PSWF(spread_order)                                                                            \
+    {                                                                                                      \
+        constexpr int c_simdWidth = GMX_SIMD_REAL_WIDTH;                                                   \
+        for (int j = 0; (j < DIM); j++)                                                                    \
+        {                                                                                                  \
+            real dr;                                                                                       \
+            alignas(GMX_SIMD_ALIGNMENT) real data[PME_ORDER_MAX];                                          \
+            alignas(GMX_SIMD_ALIGNMENT) real data_der[PME_ORDER_MAX];                                      \
+                                                                                                           \
+            /* dr is relative offset from lower cell limit */                                              \
+            dr = xptr[j];                                                                                  \
+                                                                                                           \
+            switch (poly_order)                                                                            \
+            {                                                                                              \
+                case 3: SIMD_POLY_EVAL(spread_order, 3, pswf_coeff, data, dr) break;                       \
+                case 4: SIMD_POLY_EVAL(spread_order, 4, pswf_coeff, data, dr) break;                       \
+                case 5: SIMD_POLY_EVAL(spread_order, 5, pswf_coeff, data, dr) break;                       \
+                case 6: SIMD_POLY_EVAL(spread_order, 6, pswf_coeff, data, dr) break;                       \
+                case 7: SIMD_POLY_EVAL(spread_order, 7, pswf_coeff, data, dr) break;                       \
+                case 8: SIMD_POLY_EVAL(spread_order, 8, pswf_coeff, data, dr) break;                       \
+                case 9: SIMD_POLY_EVAL(spread_order, 9, pswf_coeff, data, dr) break;                       \
+                case 10: SIMD_POLY_EVAL(spread_order, 10, pswf_coeff, data, dr) break;                     \
+                default: SIMD_POLY_EVAL(spread_order, poly_order, pswf_coeff, data, dr) break;             \
+            }                                                                                              \
+                                                                                                           \
+            switch (poly_order_der)                                                                        \
+            {                                                                                              \
+                case 3: SIMD_POLY_EVAL(spread_order, 3, pswf_der_coeff, data_der, dr) break;               \
+                case 4: SIMD_POLY_EVAL(spread_order, 4, pswf_der_coeff, data_der, dr) break;               \
+                case 5: SIMD_POLY_EVAL(spread_order, 5, pswf_der_coeff, data_der, dr) break;               \
+                case 6: SIMD_POLY_EVAL(spread_order, 6, pswf_der_coeff, data_der, dr) break;               \
+                case 7: SIMD_POLY_EVAL(spread_order, 7, pswf_der_coeff, data_der, dr) break;               \
+                case 8: SIMD_POLY_EVAL(spread_order, 8, pswf_der_coeff, data_der, dr) break;               \
+                case 9: SIMD_POLY_EVAL(spread_order, 9, pswf_der_coeff, data_der, dr) break;               \
+                case 10: SIMD_POLY_EVAL(spread_order, 10, pswf_der_coeff, data_der, dr) break;             \
+                default: SIMD_POLY_EVAL(spread_order, poly_order_der, pswf_der_coeff, data_der, dr) break; \
+            }                                                                                              \
+                                                                                                           \
+            for (int k = 0; k < (spread_order); k++)                                                       \
+            {                                                                                              \
+                theta[j][i * (spread_order) + k] = data[k];                                                \
+                dtheta[j][i * (spread_order) + k] = data_der[k];                                           \
+            }                                                                                              \
+        }                                                                                                  \
     }
 
 // TODO libin: optimized simd version
@@ -302,16 +354,11 @@ static void make_pswfs(gmx::ArrayRef<real*> theta,
             switch (order)
             {
                 // TODO: switch to use monomial basis
-                case 3: CALC_PSWF(3) break;
                 case 4: CALC_PSWF(4) break;
                 case 5: CALC_PSWF(5) break;
                 case 6: CALC_PSWF(6) break;
                 case 7: CALC_PSWF(7) break;
                 case 8: CALC_PSWF(8) break;
-                case 9: CALC_PSWF(9) break;
-                case 10: CALC_PSWF(10) break;
-                case 11: CALC_PSWF(11) break;
-                case 12: CALC_PSWF(12) break;
                 default: CALC_PSWF(order) break;
             }
             /*
@@ -1100,12 +1147,15 @@ void spread_on_grid(const gmx_pme_t* pme,
                               atc->coefficient.data(),
                               computeAllSplineCoefficients);
                 #else
-                // TODO libin: it's slow
+                // TODO libin: it's slow, a bit faster now with simd eval kernel, no symmetry trick yet
+                size_t pme_order_padded = roundUpToMultipleOfFactor<GMX_SIMD_REAL_WIDTH>(pme->pme_order);
                 make_pswfs(spline->theta.coefficients,
                            spline->dtheta.coefficients,
                            pme->pme_order,
-                           pme->spread_pswf.size()/pme->pme_order,
-                           pme->spread_pswf_derivative.size()/pme->pme_order,
+                           //pme->spread_pswf.size()/pme->pme_order,
+                           pme->spread_pswf.size()/pme_order_padded,
+                           //pme->spread_pswf_derivative.size()/pme->pme_order,
+                           pme->spread_pswf_derivative.size()/pme_order_padded,
                            pme->pswf_spread_coeff_q,
                            as_rvec_array(atc->fractx.data()),
                            spline->n,

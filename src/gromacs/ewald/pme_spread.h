@@ -40,6 +40,12 @@ struct gmx_pme_t;
 struct PmeAndFftGrids;
 class PmeAtomComm;
 
+namespace gmx
+{
+template<typename>
+class ArrayRef;
+}
+
 /*! \brief Spread coefficients on the grid
  *
  * \param[in]     pme    PME data

@@ -800,7 +800,8 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
 
     /* pme spread polynomials setup */
     double pswf_c = 0.0;
-    double tol_spread=ir->ewald_rtol;
+    //double tol_spread=ir->ewald_rtol;
+    double tol_spread=ir->ewald_rtol*0.5;
     double tol_spread_coeff=tol_spread*1.0e-0;
     //spread_window_real_space_cheb(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf, pswf_c);
     spread_window_real_space_mono(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf, pswf_c);

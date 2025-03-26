@@ -2153,6 +2153,9 @@ double spread_window_ref(double c, int P, int i, double x) {
 double spread_window_der_ref(double c, int P, int i, double x) {
     double arg = x - P / 2.0 + i;
     arg /= P / 2.0;
+    if(std::abs(arg) > 1) {
+        return 0;
+    }
     double val = prolate0_eval_derivative(c, arg)*2.0/P;
     return val;
 }

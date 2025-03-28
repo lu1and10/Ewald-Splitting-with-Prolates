@@ -31,7 +31,6 @@
  * To help us fund GROMACS development, we humbly ask that you cite
  * the research papers on the package. Check out https://www.gromacs.org.
  */
-//#define MYDEBUGPRINT 1
 #include "gmxpre.h"
 
 #include "config.h"

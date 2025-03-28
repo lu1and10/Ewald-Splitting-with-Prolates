@@ -486,15 +486,19 @@ static double spline3_table_scale(double third_deriv_max, double x_scale, double
     /* Force tolerance: single precision accuracy */
     deriv_tol = GMX_FLOAT_EPS;
     sc_deriv  = std::sqrt(third_deriv_max / (6 * 4 * deriv_tol * x_scale)) * x_scale;
+    #ifdef MYDEBUGPRINT
     std::cout << "third_deriv_max: " << third_deriv_max << std::endl;
     std::cout << "deriv_tol: " << deriv_tol << std::endl;
     std::cout << "x_scale: " << x_scale << std::endl;
     std::cout << "sc_deriv: " << sc_deriv << std::endl;
+    #endif
 
     /* Don't try to be more accurate on energy than the precision */
     func_tol = std::max(func_tol, static_cast<double>(GMX_REAL_EPS));
     sc_func  = std::cbrt(third_deriv_max / (6 * 12 * std::sqrt(3.0) * func_tol)) * x_scale;
+    #ifdef MYDEBUGPRINT
     std::cout << "sc_func: " << sc_func << std::endl;
+    #endif
 
     return std::max(sc_deriv, sc_func);
 }
@@ -543,7 +547,9 @@ real ewald_spline3_table_scale_pswf(const interaction_const_t& ic,
             fprintf(debug, "Ewald Coulomb quadratic spline table spacing: %f nm\n", 1 / sc_q);
         }
 
+        #ifdef MYDEBUGPRINT
         std::cout << "Ewald Coulomb pswf quadratic spline table scale: " << sc_q << std::endl;
+        #endif
         sc = std::max(sc, sc_q);
     }
 
@@ -613,7 +619,9 @@ real ewald_spline3_table_scale(const interaction_const_t& ic,
             fprintf(debug, "Ewald Coulomb quadratic spline table spacing: %f nm\n", 1 / sc_q);
         }
 
+        #ifdef MYDEBUGPRINT
         std::cout << "Ewald Coulomb quadratic spline table scale: " << sc_q << std::endl;
+        #endif
         sc = std::max(sc, sc_q);
     }
 

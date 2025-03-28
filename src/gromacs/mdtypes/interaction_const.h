@@ -101,10 +101,10 @@ struct PSWF_Polynomials
     //AlignedVector<double> spread_fun;
     //AlignedVector<double> spread_fun_fourier;
     //AlignedVector<double> spread_fun_derivative;
-    AlignedVector<double> pswf_long_range_energy;
-    AlignedVector<double> pswf_long_range_force;
-    AlignedVector<double> pswf_split_fun_fourier;
-    AlignedVector<double> pswf_split_fun;
+    AlignedVector<real> pswf_long_range_energy;
+    AlignedVector<real> pswf_long_range_force;
+    AlignedVector<real> pswf_split_fun_fourier;
+    AlignedVector<real> pswf_split_fun;
 };
 
 /* The physical interaction parameters for non-bonded interaction calculations

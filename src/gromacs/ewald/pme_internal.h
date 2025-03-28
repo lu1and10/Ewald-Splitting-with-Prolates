@@ -50,8 +50,6 @@
 #ifndef GMX_EWALD_PME_INTERNAL_H
 #define GMX_EWALD_PME_INTERNAL_H
 
-//#define MYDEBUGPRINT 1
-//#define MYDEBUGUSEBSPLINE 1
 
 #include "config.h"
 
@@ -443,14 +441,14 @@ struct gmx_pme_t
     /* pswf splitting function modes table */
     //std::vector<real> pswf_mod;
     /* spread pswf function polynomial coefficients */
-    AlignedVector<double> spread_pswf;
-    AlignedVector<double> spread_pswf_fourier;
-    AlignedVector<double> spread_pswf_derivative;
+    AlignedVector<real> spread_pswf;
+    AlignedVector<real> spread_pswf_fourier;
+    AlignedVector<real> spread_pswf_derivative;
     /* split pswf function polynomial coefficients*/
     //AlignedVector<double> pswf_long_range_energy;
     //AlignedVector<double> pswf_long_range_force;
-    AlignedVector<double> pswf_split_fun_fourier;
-    AlignedVector<double> pswf_split_fun;
+    AlignedVector<real> pswf_split_fun_fourier;
+    AlignedVector<real> pswf_split_fun;
 
     // The B-spline moduli coefficients
     std::array<std::vector<real>, DIM> bsp_mod;

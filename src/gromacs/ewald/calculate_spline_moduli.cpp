@@ -210,7 +210,7 @@ std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz,
 }
 
 /* Calculate the pswf moduli for one dimension */
-static std::vector<real> make_pswf_moduli_dim(int n, int order, double c, int poly_order, double poly_coeff[])
+static std::vector<real> make_pswf_moduli_dim(int n, int order, double c, int poly_order, real poly_coeff[])
 {
     double zarg, zargi;
     int    maxk, i;
@@ -274,7 +274,7 @@ static std::vector<real> make_pswf_moduli_dim(int n, int order, double c, int po
 }
 
 /* Calculate the P3M B-spline moduli */
-std::array<std::vector<real>, 3> make_pswf_moduli(int nx, int ny, int nz, int order, double c, int poly_order, double poly_coeff[])
+std::array<std::vector<real>, 3> make_pswf_moduli(int nx, int ny, int nz, int order, double c, int poly_order, real poly_coeff[])
 {
     std::array<std::vector<real>, 3> bsp_mod;
 

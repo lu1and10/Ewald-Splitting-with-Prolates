@@ -331,8 +331,8 @@ static void make_pswfs(gmx::ArrayRef<real*> theta,
                        int                  nr,
                        const int            ind[],
                        const real           coefficient[],
-                       const double         pswf_coeff[],
-                       const double         pswf_der_coeff[],
+                       const real           pswf_coeff[],
+                       const real           pswf_der_coeff[],
                        const bool           computeAllSplineCoefficients)
 {
     /* construct splines for local atoms */

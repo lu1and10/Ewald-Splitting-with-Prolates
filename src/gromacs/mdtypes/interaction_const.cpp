@@ -114,7 +114,9 @@ static void initCoulombEwaldParameters(FILE*                fp,
     }
 
     ic->ewaldcoeff_q = calc_ewaldcoeff_q(ir.rcoulomb, ir.ewald_rtol);
+    #ifdef MYDEBUGPRINT
     std::cout<<"ewaldcoeff_q: "<<ic->ewaldcoeff_q<<std::endl;
+    #endif
     ic->ewald_rtol = ir.ewald_rtol;
 
     /* init the pswf ewald polynormials used in short range table generation */
@@ -129,9 +131,12 @@ static void initCoulombEwaldParameters(FILE*                fp,
     ic->pswfcoeff_q = pswf_c;
     ic->pswfcoeff_c0 = pswf_c0;
     ic->pswfcoeff_psi0 = psi0;
+
+    #ifdef MYDEBUGPRINT
     std::cout<<"splitting pswfcoeff_q: "<<ic->pswfcoeff_q<<std::endl;
     std::cout<<"splitting pswfcoeff_c0: "<<ic->pswfcoeff_c0<<std::endl;
     std::cout<<"splitting pswfcoeff_psi0: "<<ic->pswfcoeff_psi0<<std::endl;
+    #endif
     //double lambda0 = 0.0;
     //splitting_function_fourier_space(ir.ewald_rtol, ir.ewald_rtol*1e-3, ic->pswfPolynomials->pswf_split_fun_fourier, lambda0);
     //ic->pswfcoeff_lambda = lambda0;

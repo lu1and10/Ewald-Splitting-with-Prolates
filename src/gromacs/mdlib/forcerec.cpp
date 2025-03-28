@@ -616,7 +616,9 @@ static void init_ewald_f_table(const interaction_const_t& ic,
     //const real tableScale = ewald_spline3_table_scale(ic, useCoulombTable, useVdwTable) * 5.0;
     //const real tableScale = ewald_spline3_table_scale(ic, useCoulombTable, useVdwTable);
     const real tableScale = ewald_spline3_table_scale_pswf(ic, useCoulombTable, useVdwTable);
+    #ifdef MYDEBUGPRINT
     std::cout << "actual table scale: " << tableScale << std::endl;
+    #endif
 
     const bool havePerturbedNonbondeds = (ic.softCoreParameters != nullptr);
 
@@ -638,7 +640,9 @@ static void init_ewald_f_table(const interaction_const_t& ic,
         //*coulombTables =
                 //generateEwaldCorrectionTables(tableSize, tableScale, ic.ewaldcoeff_q, v_q_ewald_lr);
         *coulombTables = generatePSWFCorrectionTables(ic, tableSize, tableScale, ic.pswfcoeff_q, v_q_ewald_lr_pswf);
+        #ifdef MYDEBUGPRINT
         std::cout << "coulombTables->tableF.size() = " << coulombTables->tableF.size() << std::endl;
+        #endif
     }
 
     if (useVdwTable)

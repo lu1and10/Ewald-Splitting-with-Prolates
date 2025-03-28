@@ -807,10 +807,12 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     spread_window_real_space_mono(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf, pswf_c);
     pme->pswf_spread_coeff_q = pswf_c;
     int ncoeffs = pme->spread_pswf.size()/pme->pme_order;
+    #ifdef MYDEBUGPRINT
     std::cout << "pme_order: " << pme->pme_order << std::endl;
     std::cout << "ewald_rtol: " << ir->ewald_rtol << std::endl;
     std::cout << "pswf_c spread: " << pswf_c << std::endl;
     std::cout << "spread approximation number of coeffs: " << ncoeffs << std::endl;
+    #endif
     // can be one degree less than spread_pswf, what does this mean ???
     //spread_window_real_space_der_cheb(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf_derivative, pswf_c);
     spread_window_real_space_der_mono(pme->pme_order, tol_spread, tol_spread_coeff, pme->spread_pswf_derivative, pswf_c);
@@ -824,11 +826,15 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     pme->pswf_split_coeff_q = pswf_split_c;
     pme->pswf_split_c0 = pswf_split_c0;
     pme->pswf_split_psi0 = pswf_split_psi0;
+    #ifdef MYDEBUGPRINT
     std::cout<<"pme init splitting pswfcoeff_psi0: "<<pme->pswf_split_psi0<<std::endl;
+    #endif
     double pswf_split_lambda0 = 0.0;
     splitting_function_fourier_space_cheb(ir->ewald_rtol, tol_split_coeff, pme->pswf_split_fun_fourier, pswf_split_lambda0);
     pme->pswf_split_lambda = pswf_split_lambda0;
+    #ifdef MYDEBUGPRINT
     std::cout<<"pme init splitting pswf_split_lambda0: "<<pme->pswf_split_lambda<<std::endl;
+    #endif
 
     /* Always constant electrostatics coefficients */
     pme->epsilon_r = ir->epsilon_r;
@@ -1049,10 +1055,14 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     {
         /* Use plain SPME B-spline interpolation */
         #ifdef MYDEBUGUSEBSPLINE
+        #ifdef MYDEBUGPRINT
         std::cout << "Using B-spline spread, building window function moduli" << std::endl;
+        #endif
         pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);
         #else
+        #ifdef MYDEBUGPRINT
         std::cout << "Using pswf spread, building window function moduli" << std::endl;
+        #endif
         pme->bsp_mod = make_pswf_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order, pswf_c, pme->spread_pswf_fourier.size(), pme->spread_pswf_fourier.data());
         #endif
     }

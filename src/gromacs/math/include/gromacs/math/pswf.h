@@ -2,6 +2,7 @@
 #define GMX_MATH_PSWF_H
 
 #include "gromacs/utility/alignedallocator.h"
+#include "gromacs/utility/real.h"
 
 #include <iostream>
 #include <unordered_map>
@@ -56,24 +57,24 @@ double prolate0_int_eval(double c, double r);
 
 // approximation functions
 // 1. spread window and derivative real space, tol, P, tol_coeff, domain [0.0, 1.0]
-void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c);
+void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c);
 void spread_window_real_space_der_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c);
-void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c);
+void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c);
 void spread_window_real_space_cheb(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c);
 void spread_window_real_space(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c);
 // 2. spread window fourier space, tol, tol_coeff, domain [0.0, 1.0]
-void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs);
+void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<real>& coeffs);
 // 3. long range energy, tol, tol_coeff, domain [0.0, 1.0]
-void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0);
+void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0);
 void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0);
 // 4. long range force, tol, tol_coeff, domain [0.0, 1.0]
-void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs);
+void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs);
 void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& coeffs);
 // 5. splitting function fourier space, tol, tol_coeff, domain [0.0, 1.0]
-void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda);
+void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda);
 void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda);
 // 6. splitting function real space, tol, tol_coeff, domain [0.0, 1.0]
-void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0, double& psi0);
+void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0, double& psi0);
 void splitting_function(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0, double& psi0);
 
 double spread_window_ref(double c, int P, int i, double x);

@@ -76,3 +76,6 @@
 #    include "swindirect.h"
 #endif
 //! \endcond
+
+//#define MYDEBUGPRINT 1
+//#define MYDEBUGUSEBSPLINE 1

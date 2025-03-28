@@ -249,7 +249,7 @@ inline static real poly_eval(real& x, int order, const real* coeff) {
 inline static void
 calc_exponentials_pswf(const gmx_pme_t& pme, int start, int end, real f, ArrayRef<real> d, ArrayRef<real> r, ArrayRef<real> e)
 {
-    double scale = 2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q;
+    real scale = 2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q;
     GMX_ASSERT(d.size() == r.size(), "d and r must have same size");
     GMX_ASSERT(d.size() == e.size(), "d and e must have same size");
     int kx;
@@ -274,7 +274,7 @@ calc_exponentials_pswf(const gmx_pme_t& pme, int start, int end, real f, ArrayRe
 inline static void
 calc_exponentials_pswf_q_ref(const gmx_pme_t& pme, int start, int end, real f, ArrayRef<real> d, ArrayRef<real> r, ArrayRef<real> e)
 {
-    double scale = 2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q;
+    real scale = 2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q;
     GMX_ASSERT(d.size() == r.size(), "d and r must have same size");
     GMX_ASSERT(d.size() == e.size(), "d and e must have same size");
     int kx;

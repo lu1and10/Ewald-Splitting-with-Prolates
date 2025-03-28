@@ -1301,7 +1301,9 @@ double prolate0_eval_derivative(double c, double x) {
     if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
 #pragma omp critical(PROLATE0_EVAL)
         if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
+            #ifdef MYDEBUGPRINT
             std::cout << "Creating new eval Prolate0Fun derivative for c = " << c << std::endl;
+            #endif
             prolate0_funcs_cache.emplace(c, Prolate0Fun(c, 10000));
         }
     }
@@ -1316,7 +1318,9 @@ double prolate0_eval(double c, double x) {
     if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
 #pragma omp critical(PROLATE0_EVAL)
         if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
+            #ifdef MYDEBUGPRINT
             std::cout << "Creating new eval Prolate0Fun for c = " << c << std::endl;
+            #endif
             prolate0_funcs_cache.emplace(c, Prolate0Fun(c, 10000));
         }
     }
@@ -1331,7 +1335,9 @@ double prolate0_int_eval(double c, double r) {
     if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
 #pragma omp critical(PROLATE0_INT_EVAL)
         if (prolate0_funcs_cache.find(c) == prolate0_funcs_cache.end()) {
+            #ifdef MYDEBUGPRINT
             std::cout << "Creating new int_eval Prolate0Fun for c = " << c << std::endl;
+            #endif
             prolate0_funcs_cache.emplace(c, Prolate0Fun(c, 10000));
         }
     }
@@ -1352,7 +1358,7 @@ static size_t roundUpToMultipleOfFactor(size_t number)
     return (number + factor - 1) & ~(factor - 1);
 }
 
-void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c) {
     prolc180(tol, c);
 
     int order = MAX_CHEB_ORDER;
@@ -1390,7 +1396,9 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
         }
     }
 
+    #ifdef MYDEBUGPRINT
     std::cout << "spread der max_order estimated from cheb = " << max_order << std::endl;
+    #endif
     if(max_order > MAX_MONO_ORDER) {
         std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
         std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
@@ -1405,7 +1413,9 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
 
     AlignedVector<double> coeffs_tmp(dof * max_order);
     int nnodes = (int)max_order*1.75;
+    #ifdef MYDEBUGPRINT
     std::cout << "nnodes = " << nnodes << std::endl;
+    #endif
     //monomial_nodes_1d(nnodes, nodes, 0, 1);
     cheb_nodes_1d(nnodes, nodes, 0, 1);
     fn_v.resize(dof * nnodes);
@@ -1414,7 +1424,9 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
             fn_v[idof * nnodes + i] = f(P, dof - idof - 1, c, nodes[i]);
         }
     }
+    #ifdef MYDEBUGPRINT
     std::cout << "spread der dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
+    #endif
     
     //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
     monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
@@ -1477,7 +1489,7 @@ void spread_window_real_space_der_cheb(int P, double tol, double tol_coeff, Alig
     }
 }
 
-void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c) {
+void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c) {
     prolc180(tol, c);
 
     int order = MAX_CHEB_ORDER;
@@ -1515,7 +1527,9 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
         }
     }
 
+    #ifdef MYDEBUGPRINT
     std::cout << "spread max_order estimated from cheb = " << max_order << std::endl;
+    #endif
     if(max_order > MAX_MONO_ORDER) {
         std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
         std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
@@ -1525,13 +1539,17 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
     // now actually construct the mono coeffs with order max_order
     constexpr int c_simdWidth = GMX_SIMD_REAL_WIDTH;
     size_t padded_dof = roundUpToMultipleOfFactor<c_simdWidth>(dof);
+    #ifdef MYDEBUGPRINT
     std::cout << "padded_dof = " << padded_dof << std::endl;
+    #endif
     coeffs.resize(padded_dof * max_order, 0.0);
     //if (coeffs.size() != dof * max_order) coeffs.resize(dof * max_order);
 
     AlignedVector<double> coeffs_tmp(dof * max_order);
     int nnodes = (int)max_order*1.75;
+    #ifdef MYDEBUGPRINT
     std::cout << "nnodes = " << nnodes << std::endl;
+    #endif
     //monomial_nodes_1d(nnodes, nodes, 0, 1);
     cheb_nodes_1d(nnodes, nodes, 0, 1);
     fn_v.resize(dof * nnodes);
@@ -1540,7 +1558,10 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
             fn_v[idof * nnodes + i] = f(P, dof - idof - 1, c, nodes[i]);
         }
     }
+
+    #ifdef MYDEBUGPRINT
     std::cout << "spread dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
+    #endif
     
     //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
     monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
@@ -1655,7 +1676,7 @@ void spread_window_real_space(int P, double tol, double tol_coeff, AlignedVector
     }
 }
 
-void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
+void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<real>& coeffs) {
     double c;
     prolc180(tol, c);
 
@@ -1667,7 +1688,10 @@ void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<dou
         lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
     }
     lambda /= prolate0_eval(c, 0.5);
+
+    #ifdef MYDEBUGPRINT
     std::cout << "spread window fourier lambda = " << lambda << std::endl;
+    #endif
 
     int order = MAX_CHEB_ORDER;
     AlignedVector<double> nodes;
@@ -1707,7 +1731,7 @@ void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<dou
     AlignedVector<double> mono_coeff;
     cheb2mono(order, dof, cheb_coeff, mono_coeff);
 
-    AlignedVector<double>& mono_coeff_filtered = coeffs;
+    AlignedVector<real>& mono_coeff_filtered = coeffs;
     if (mono_coeff_filtered.size() != dof * max_order) mono_coeff_filtered.resize(dof * max_order);
     for (int i = 0; i < dof; i++) {
         for (int j = 0; j < max_order; j++) {
@@ -1716,7 +1740,7 @@ void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<dou
     }
 }
 
-void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0) {
+void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0) {
     prolc180(tol, c);
 
     c0 = prolate0_int_eval(c, 1.0);
@@ -1754,7 +1778,7 @@ void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<dou
         }
     }
 
-    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    AlignedVector<real>& cheb_coeff_filtered = coeffs;
     if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
     for (int i = 0; i < dof; i++) {
         for (int j = 0; j < max_order; j++) {
@@ -1816,7 +1840,7 @@ void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>&
     }
 }
 
-void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs) {
+void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs) {
     double c;
     prolc180(tol, c);
 
@@ -1857,7 +1881,7 @@ void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<doub
         }
     }
 
-    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    AlignedVector<real>& cheb_coeff_filtered = coeffs;
     if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
     for (int i = 0; i < dof; i++) {
         for (int j = 0; j < max_order; j++) {
@@ -1920,7 +1944,7 @@ void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& 
     }
 }
 
-void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda) {
+void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda) {
     double c;
     prolc180(tol, c);
 
@@ -1968,7 +1992,7 @@ void splitting_function_fourier_space_cheb(double tol, double tol_coeff, Aligned
         }
     }
 
-    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    AlignedVector<real>& cheb_coeff_filtered = coeffs;
     if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
     for (int i = 0; i < dof; i++) {
         for (int j = 0; j < max_order; j++) {
@@ -2039,7 +2063,7 @@ void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVecto
     }
 }
 
-void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0, double& psi0) {
+void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0, double& psi0) {
     prolc180(tol, c);
 
     c0 = prolate0_int_eval(c, 1.0);
@@ -2078,7 +2102,7 @@ void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<double>
         }
     }
 
-    AlignedVector<double>& cheb_coeff_filtered = coeffs;
+    AlignedVector<real>& cheb_coeff_filtered = coeffs;
     if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
     for (int i = 0; i < dof; i++) {
         for (int j = 0; j < max_order; j++) {

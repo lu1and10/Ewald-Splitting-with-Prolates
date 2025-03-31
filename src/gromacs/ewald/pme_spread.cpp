@@ -572,6 +572,8 @@ static void spread_coefficients_bsplines_thread(pmegrid_t*                      
                     DO_BSPLINE(7) break;
                 case 8:
                     DO_BSPLINE(8) break;
+                case 9:
+                    DO_BSPLINE(9) break;
                 default: DO_BSPLINE(order) break;
             }
         }

@@ -350,6 +350,8 @@ void gather_f_bsplines(const gmx_pme_t*          pme,
                 case 4: f = spline_func(std::integral_constant<int, 4>()); break;
                 case 5: f = spline_func(std::integral_constant<int, 5>()); break;
                 case 6: f = spline_func(6); break;
+                case 7: f = spline_func(7); break;
+                case 8: f = spline_func(8); break;
                 default: f = spline_func(order); break;
             }
 

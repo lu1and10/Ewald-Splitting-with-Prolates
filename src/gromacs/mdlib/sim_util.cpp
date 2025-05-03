@@ -2205,6 +2205,18 @@ void do_force(FILE*                         fplog,
     {
         #ifdef MYDEBUGPRINT
         std::cout<< "pme start, energy before: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        std::cout<< "forcewithvirial size: "<< forceOutMtsLevel1->forceWithVirial().force().size() << std::endl;
+        int fsize_lb = forceOutMtsLevel1->forceWithVirial().force().size();
+        std::ofstream fout_lb("./force_longrange_ewald_before.txt", std::ios::out);
+        fout_lb << std::scientific << std::setprecision(16);
+        for(int iforce = 0; iforce < fsize_lb; iforce++)
+        {
+            for(int idim = 0; idim < 3; idim++)
+            {
+                fout_lb << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
+            }
+        }
+        fout_lb.close();
         #endif
         longRangeNonbondeds->calculate(fr->pmedata,
                                        cr,
@@ -2218,6 +2230,18 @@ void do_force(FILE*                         fplog,
                                        ddBalanceRegionHandler);
         #ifdef MYDEBUGPRINT
         std::cout<< "pme end, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        std::cout<< "forcewithvirial size: "<< forceOutMtsLevel1->forceWithVirial().force().size() << std::endl;
+        int fsize_la = forceOutMtsLevel1->forceWithVirial().force().size();
+        std::ofstream fout_la("./force_longrange_ewald_after.txt", std::ios::out);
+        fout_la << std::scientific << std::setprecision(16);
+        for(int iforce = 0; iforce < fsize_la; iforce++)
+        {
+            for(int idim = 0; idim < 3; idim++)
+            {
+                fout_la << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
+            }
+        }
+        fout_la.close();
         energy_sr_and_lr += enerd->term[F_COUL_RECIP];
         std::cout << "energy sr and lr: " << energy_sr_and_lr << std::endl;
         std::ofstream fout("./energy_sr_lr_pswf.txt", std::ios::out);

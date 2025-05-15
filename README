@@ -1,3 +1,18 @@
+This is a fork of the [GROMACS](https://github.com/gromacs/gromacs)
+molecular dynamics software.
+This fork includes custom modifications for the ESP(Ewald summation with
+prolate spheroidal wave functions) method.
+
+The ESP method code modifications main contributors:
+* Jiuyang Liang
+* Libin Lu
+* Alex Barnett
+* Leslie Greengard
+* Shidong Jiang
+
+**Note:** This codebase is not an official version of GROMACS.
+It is independently maintained and modified.
+
                Welcome to the official version of GROMACS!
 
 If you are familiar with Unix, it should be fairly trivial to compile and

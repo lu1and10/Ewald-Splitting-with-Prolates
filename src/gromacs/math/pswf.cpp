@@ -417,6 +417,7 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     double* tU = (double*)malloc(m * k * sizeof(double));
     double* tS = (double*)malloc(k * sizeof(double));
     double* tVT = (double*)malloc(k * n * sizeof(double));
+    //int* iwork = (int*)malloc(8 * k * sizeof(int));
     int* iwork = (int*)malloc(8 * std::max<int>(m,n) * sizeof(int));
 
     // SVD
@@ -2001,6 +2002,63 @@ void splitting_function_fourier_space_cheb(double tol, double tol_coeff, Aligned
     }
 }
 
+void splitting_function_fourier_space_der_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda) {
+    double c;
+    prolc180(tol, c);
+
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int quad_npts = 200;
+    AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
+    gaussian_quadrature(quad_npts, xs.data(), ws.data());
+    lambda = 0.0;
+    for (int i = 0; i < quad_npts; i++) {
+        lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
+    }
+    lambda /= prolate0_eval(c, 0.5);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double lambda, double c, double c0, double x) {
+        double val = lambda * x * prolate0_eval_derivative(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(lambda, c, c0, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    AlignedVector<real>& cheb_coeff_filtered = coeffs;
+    if (cheb_coeff_filtered.size() != dof * max_order) cheb_coeff_filtered.resize(dof * max_order);
+    for (int i = 0; i < dof; i++) {
+        for (int j = 0; j < max_order; j++) {
+            cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
+        }
+    }
+}
+
 void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda) {
     double c;
     prolc180(tol, c);
@@ -2222,6 +2280,29 @@ double splitting_function_fourier_space_ref(double c, double c0, double lambda, 
     */
 
     double val = lambda * prolate0_eval(c, x) / c0;
+    return val;
+}
+
+double splitting_function_fourier_space_der_ref(double c, double c0, double lambda, double x) {
+
+    if (std::abs(x) > 1) {
+        return 0;
+    }
+
+    /*
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int quad_npts = 200;
+    AlignedVector<double> xs(quad_npts, 0), ws(quad_npts, 0);
+    gaussian_quadrature(quad_npts, xs.data(), ws.data());
+    double lambda = 0.0;
+    for (int i = 0; i < quad_npts; i++) {
+        lambda += ws[i] * prolate0_eval(c, xs[i]) * std::cos(c * xs[i] * 0.5);
+    }
+    lambda /= prolate0_eval(c, 0.5);
+    */
+
+    double val = lambda * x * prolate0_eval_derivative(c, x) / c0;
     return val;
 }
 

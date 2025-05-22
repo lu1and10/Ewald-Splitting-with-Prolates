@@ -2248,7 +2248,7 @@ void do_force(FILE*                         fplog,
         fout << std::scientific << std::setprecision(16);
         fout << energy_sr_and_lr << std::endl;
         fout.close();
-        exit(0);
+        //exit(0);
         #endif
     }
 
@@ -2729,6 +2729,33 @@ void do_force(FILE*                         fplog,
      * the balance timing, which is ok as most tasks do communication.
      */
     ddBalanceRegionHandler.openBeforeForceComputationCpu(DdAllowBalanceRegionReopen::no);
+    #ifdef MYDEBUGPRINT
+        std::cout << "virial: " << vir_force[0][0] << ", " << vir_force[0][1] << ", " << vir_force[0][2] << std::endl;
+        std::cout << "virial: " << vir_force[1][0] << ", " << vir_force[1][1] << ", " << vir_force[1][2] << std::endl;
+        std::cout << "virial: " << vir_force[2][0] << ", " << vir_force[2][1] << ", " << vir_force[2][2] << std::endl;
+        /*
+        std::cout<< "pme end, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
+        std::cout<< "forcewithvirial size: "<< forceOutMtsLevel1->forceWithVirial().force().size() << std::endl;
+        int fsize_la = forceOutMtsLevel1->forceWithVirial().force().size();
+        std::ofstream fout_la("./force_longrange_ewald_after.txt", std::ios::out);
+        fout_la << std::scientific << std::setprecision(16);
+        for(int iforce = 0; iforce < fsize_la; iforce++)
+        {
+            for(int idim = 0; idim < 3; idim++)
+            {
+                fout_la << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
+            }
+        }
+        fout_la.close();
+        energy_sr_and_lr += enerd->term[F_COUL_RECIP];
+        std::cout << "energy sr and lr: " << energy_sr_and_lr << std::endl;
+        std::ofstream fout("./energy_sr_lr_ewald.txt", std::ios::out);
+        fout << std::scientific << std::setprecision(16);
+        fout << energy_sr_and_lr << std::endl;
+        fout.close();
+        */
+        exit(0);
+    #endif
 }
 
 } // namespace gmx

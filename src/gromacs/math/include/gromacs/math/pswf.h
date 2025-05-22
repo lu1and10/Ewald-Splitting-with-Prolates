@@ -72,6 +72,7 @@ void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<real
 void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& coeffs);
 // 5. splitting function fourier space, tol, tol_coeff, domain [0.0, 1.0]
 void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda);
+void splitting_function_fourier_space_der_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda);
 void splitting_function_fourier_space(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& lambda);
 // 6. splitting function real space, tol, tol_coeff, domain [0.0, 1.0]
 void splitting_function_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0, double& psi0);
@@ -81,5 +82,6 @@ double spread_window_ref(double c, int P, int i, double x);
 double spread_window_der_ref(double c, int P, int i, double x);
 double spread_window_fourier_ref(double c, double x);
 double splitting_function_fourier_space_ref(double c, double c0, double lambda, double x);
+double splitting_function_fourier_space_der_ref(double c, double c0, double lambda, double x);
 double splitting_function_real_space_ref(double c, double c0, double x);
 #endif  // GMX_MATH_PSWF_H

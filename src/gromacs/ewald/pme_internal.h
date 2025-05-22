@@ -448,6 +448,7 @@ struct gmx_pme_t
     //AlignedVector<double> pswf_long_range_energy;
     //AlignedVector<double> pswf_long_range_force;
     AlignedVector<real> pswf_split_fun_fourier;
+    AlignedVector<real> pswf_split_fun_fourier_der;
     AlignedVector<real> pswf_split_fun;
 
     // The B-spline moduli coefficients

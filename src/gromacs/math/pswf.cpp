@@ -417,7 +417,7 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     double* tU = (double*)malloc(m * k * sizeof(double));
     double* tS = (double*)malloc(k * sizeof(double));
     double* tVT = (double*)malloc(k * n * sizeof(double));
-    int* iwork = (int*)malloc(8 * k * sizeof(int));
+    int* iwork = (int*)malloc(8 * std::max<int>(m,n) * sizeof(int));
 
     // SVD
     int INFO = 0;

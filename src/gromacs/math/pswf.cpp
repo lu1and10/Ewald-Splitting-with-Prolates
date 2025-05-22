@@ -1043,7 +1043,7 @@ static inline void prolfun0(int& ier, int n, double c, double* as, double* bs, d
 
         double err = 0;
         for (int j = 0; j < n / 2; ++j) {
-            err += (as[j] - xk[j]) * xk[j];
+            err += (as[j] - xk[j]) * (as[j] - xk[j]);
             as[j] = xk[j];
         }
         err = std::sqrt(err);

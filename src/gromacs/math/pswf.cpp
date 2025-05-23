@@ -414,7 +414,12 @@ static inline void pseudo_inv(double* M, int n1, int n2, double eps, double* M_)
     // double* tU = (double*)aligned_alloc(alignment, m * k * sizeof(double));
     // double* tS = (double*)aligned_alloc(alignment, k * sizeof(double));
     // double* tVT = (double*)aligned_alloc(alignment, k * n * sizeof(double));
-    double* tU = (double*)malloc(m * k * sizeof(double));
+    //double* tU = (double*)malloc(m * k * sizeof(double));
+    // TODO: debug, when linking external lapack(mkl, openblas, etc) tU can be m*k
+    // when linking internal lapack, tU needs to be m*max(m,n) otherwise it will cause
+    // segmentation fault.
+    // Not sure why, need to debug and investigate.
+    double* tU = (double*)malloc(m * std::max<int>(m,n) * sizeof(double));
     double* tS = (double*)malloc(k * sizeof(double));
     double* tVT = (double*)malloc(k * n * sizeof(double));
     //int* iwork = (int*)malloc(8 * k * sizeof(int));

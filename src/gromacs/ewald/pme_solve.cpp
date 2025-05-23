@@ -81,6 +81,7 @@ struct pme_solve_work_t
     gmx::PaddedVector<real> tmp1;
     gmx::PaddedVector<real> tmp2;
     gmx::PaddedVector<real> eterm;
+    gmx::PaddedVector<real> eterm_der;
     std::vector<real>       m2inv;
 
     real   energy_q;
@@ -99,6 +100,7 @@ pme_solve_work_t::pme_solve_work_t(const int nkx)
     tmp1.resizeWithPadding(nkx);
     tmp2.resizeWithPadding(nkx);
     eterm.resizeWithPadding(nkx);
+    eterm_der.resizeWithPadding(nkx);
     m2inv.resize(nkx);
 
     /* Init all allocated elements of denom to 1 to avoid 1/0 exceptions
@@ -238,6 +240,46 @@ inline static void calc_exponentials_pswf(const gmx_pme_t& pme,
         }
     }
 }
+inline static void calc_exponentials_pswf_with_der(const gmx_pme_t& pme,
+                                          int /*unused*/,
+                                          int /*unused*/,
+                                          real                     f,
+                                          ArrayRef<const SimdReal> d_aligned,
+                                          ArrayRef<const SimdReal> r_aligned,
+                                          ArrayRef<SimdReal>       e_aligned,
+                                          ArrayRef<SimdReal>       e_der_aligned)
+{
+    {
+        SimdReal f_simd(f);
+        SimdReal tmp_d1, tmp_r, tmp_e;
+        SimdReal scale(2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q);
+        SimdBool mask;
+
+        /* We only need to calculate from start. But since start is 0 or 1
+         * and we want to use aligned loads/stores, we always start from 0.
+         */
+        GMX_ASSERT(d_aligned.size() == r_aligned.size(), "d and r must have same size");
+        GMX_ASSERT(d_aligned.size() == e_aligned.size(), "d and e must have same size");
+        for (size_t kx = 0; kx != d_aligned.size(); ++kx)
+        {
+            tmp_d1            = d_aligned[kx];
+            tmp_r             = r_aligned[kx];
+            tmp_r             = scale * gmx::sqrt<MathOptimization::Unsafe>(tmp_r);
+            mask              = tmp_r <= SimdReal(1.0);
+            // TODO: switch to monomial eval
+            tmp_e             = SimdReal(0.5) * cheb_eval(tmp_r, pme.pswf_split_fun_fourier.size(), pme.pswf_split_fun_fourier.data());
+            tmp_e             = gmx::selectByMask(tmp_e, mask);
+            tmp_d1            = f_simd / tmp_d1;
+            tmp_e             = tmp_d1 * tmp_e;
+            e_aligned[kx]     = tmp_e;
+            // TODO: switch to monomial eval
+            tmp_e             = SimdReal(0.5) * cheb_eval(tmp_r, pme.pswf_split_fun_fourier_der.size(), pme.pswf_split_fun_fourier_der.data());
+            tmp_e             = gmx::selectByMask(tmp_e, mask);
+            tmp_e             = tmp_d1 * tmp_e;
+            e_der_aligned[kx] = tmp_e;
+        }
+    }
+}
 #else
 inline static real poly_eval(real& x, int order, const real* coeff) {
     real result = coeff[order-1];
@@ -290,6 +332,30 @@ calc_exponentials_pswf_q_ref(const gmx_pme_t& pme, int start, int end, real f, A
     for (kx = start; kx < end; kx++)
     {
         e[kx] = f * r[kx] * d[kx];
+    }
+}
+
+inline static void
+calc_exponentials_pswf_q_with_der_ref(const gmx_pme_t& pme, int start, int end, real f, ArrayRef<real> d, ArrayRef<real> r, ArrayRef<real> e, ArrayRef<real> e_der)
+{
+    real scale = 2.0 * pme.pswf_rcoulomb / pme.pswf_split_coeff_q;
+    GMX_ASSERT(d.size() == r.size(), "d and r must have same size");
+    GMX_ASSERT(d.size() == e.size(), "d and e must have same size");
+    int kx;
+    for (kx = start; kx < end; kx++)
+    {
+        d[kx] = 1.0 / d[kx];
+    }
+    for (kx = start; kx < end; kx++)
+    {
+        real arg = scale*std::sqrt(r[kx]);
+        r[kx] = 0.5 * splitting_function_fourier_space_ref(pme.pswf_split_coeff_q, pme.pswf_split_c0, pme.pswf_split_lambda, arg);
+        e_der[kx] = 0.5 * splitting_function_fourier_space_der_ref(pme.pswf_split_coeff_q, pme.pswf_split_c0, pme.pswf_split_lambda, arg);
+    }
+    for (kx = start; kx < end; kx++)
+    {
+        e[kx] = f * r[kx] * d[kx];
+        e_der[kx] = f * e_der[kx] * d[kx];
     }
 }
 
@@ -418,7 +484,7 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
     int        kx, ky, kz, maxkx, maxky;
     int        iyz0, iyz1, iyz, iy, iz, kxstart, kxend;
     real       mx, my, mz;
-    real       ewaldcoeff = pme.ewaldcoeff_q;
+    //real       ewaldcoeff = pme.ewaldcoeff_q;
     //real       factor     = M_PI * M_PI / (ewaldcoeff * ewaldcoeff);
     real       factor     = M_PI * M_PI;
     real       ets2, struct2, vfactor, ets2vf;
@@ -474,6 +540,7 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
     real* gmx_restrict denom = work.denom.data();
     real* gmx_restrict tmp1  = work.tmp1.data();
     real* gmx_restrict eterm = work.eterm.data();
+    real* gmx_restrict eterm_der = work.eterm_der.data();
     real* gmx_restrict m2inv = work.m2inv.data();
 
     iyz0 = local_ndata[YY] * local_ndata[ZZ] * thread / nthread;
@@ -583,25 +650,26 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
                     ArrayRef<PME_T>(eterm, eterm + roundUpToMultipleOfFactor<c_simdWidth>(kxend)));
             }
             else if (true){
-            calc_exponentials_pswf(
+            calc_exponentials_pswf_with_der(
                     pme,
                     kxstart,
                     kxend,
                     elfac,
                     ArrayRef<PME_T>(denom, denom + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
                     ArrayRef<PME_T>(tmp1, tmp1 + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
-                    ArrayRef<PME_T>(eterm, eterm + roundUpToMultipleOfFactor<c_simdWidth>(kxend)));
-
+                    ArrayRef<PME_T>(eterm, eterm + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
+                    ArrayRef<PME_T>(eterm_der, eterm_der + roundUpToMultipleOfFactor<c_simdWidth>(kxend)));
             }
             else {
-            calc_exponentials_pswf_q_ref(
+            calc_exponentials_pswf_q_with_der_ref(
                     pme,
                     kxstart,
                     kxend,
                     elfac,
                     ArrayRef<real>(denom, denom + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
                     ArrayRef<real>(tmp1, tmp1 + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
-                    ArrayRef<real>(eterm, eterm + roundUpToMultipleOfFactor<c_simdWidth>(kxend)));
+                    ArrayRef<real>(eterm, eterm + roundUpToMultipleOfFactor<c_simdWidth>(kxend)),
+                    ArrayRef<real>(eterm_der, eterm_der + roundUpToMultipleOfFactor<c_simdWidth>(kxend)));
             }
 
             for (kx = kxstart; kx < kxend; kx++, p0++)
@@ -614,16 +682,20 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
 
                 struct2 = 2.0 * (d1 * d1 + d2 * d2);
 
-                tmp1[kx] = eterm[kx] * struct2;
+                //tmp1[kx] = eterm[kx] * struct2;
+                tmp1[kx] = struct2;
             }
 
             for (kx = kxstart; kx < kxend; kx++)
             {
-                ets2    = corner_fac * tmp1[kx];
-                vfactor = (factor * m2[kx] + 1.0) * 2.0 * m2inv[kx];
+                //ets2    = corner_fac * tmp1[kx];
+                //vfactor = (factor * m2[kx] + 1.0) * 2.0 * m2inv[kx];
+                ets2    = corner_fac * tmp1[kx] * eterm[kx];
+                vfactor = 1.0 * 2.0 * m2inv[kx];
                 energy += ets2;
 
-                ets2vf = ets2 * vfactor;
+                //ets2vf = ets2 * vfactor;
+                ets2vf = ets2 * vfactor - corner_fac * tmp1[kx] * eterm_der[kx] * m2inv[kx];
                 virxx += ets2vf * mhx[kx] * mhx[kx] - ets2;
                 virxy += ets2vf * mhx[kx] * mhy[kx];
                 virxz += ets2vf * mhx[kx] * mhz[kx];

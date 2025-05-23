@@ -835,6 +835,7 @@ gmx_pme_t* gmx_pme_init(const t_commrec*                 cr,
     #ifdef MYDEBUGPRINT
     std::cout<<"pme init splitting pswf_split_lambda0: "<<pme->pswf_split_lambda<<std::endl;
     #endif
+    splitting_function_fourier_space_der_cheb(ir->ewald_rtol, tol_split_coeff, pme->pswf_split_fun_fourier_der, pswf_split_lambda0);
 
     /* Always constant electrostatics coefficients */
     pme->epsilon_r = ir->epsilon_r;

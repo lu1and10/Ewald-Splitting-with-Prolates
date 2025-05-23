@@ -103,7 +103,7 @@ struct PSWF_Polynomials
     //AlignedVector<double> spread_fun_derivative;
     AlignedVector<real> pswf_long_range_energy;
     AlignedVector<real> pswf_long_range_force;
-    AlignedVector<real> pswf_split_fun_fourier;
+    //AlignedVector<real> pswf_split_fun_fourier;
     AlignedVector<real> pswf_split_fun;
 };
 

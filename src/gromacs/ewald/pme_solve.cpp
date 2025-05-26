@@ -111,6 +111,16 @@ pme_solve_work_t::pme_solve_work_t(const int nkx)
     {
         d = 1;
     }
+
+    /* Init all allocated elements of tmp1 to 1 to avoid
+     * gmx::sqrt<MathOptimization::Unsafe>(0) exceptions
+     * of simd padded elements.
+     */
+    ArrayRef<real> tmp1Padded = tmp1.arrayRefWithPadding().paddedArrayRef();
+    for (real& t1 : tmp1Padded)
+    {
+        t1 = 1;
+    }
 }
 
 PmeSolve::PmeSolve(const int numThreads, const int nkx)

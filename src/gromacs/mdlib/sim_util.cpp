@@ -2035,7 +2035,7 @@ void do_force(FILE*                         fplog,
         #endif
         do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::Local, enbvClearFYes, step, nrnb, wcycle);
         #ifdef MYDEBUGPRINT
-        std::cout << "entering do_nb_verlet, group size after: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR].size() << std::endl;
+        std::cout << "exiting do_nb_verlet, group size after: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR].size() << std::endl;
         std::cout << "exiting do_nb_verlet, energy after: " <<  enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
         energy_sr_and_lr = enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0];
         #endif

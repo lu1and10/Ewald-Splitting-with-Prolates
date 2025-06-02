@@ -2030,10 +2030,12 @@ void do_force(FILE*                         fplog,
         #ifdef MYDEBUGPRINT
         std::cout << "energy ngroup: " << enerd->grpp.nener << std::endl;
         std::cout << std::scientific << std::setprecision(16);
+        std::cout << "entering do_nb_verlet, group size before: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR].size() << std::endl;
         std::cout << "entering do_nb_verlet, energy before: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
         #endif
         do_nb_verlet(fr, ic, enerd, stepWork, InteractionLocality::Local, enbvClearFYes, step, nrnb, wcycle);
         #ifdef MYDEBUGPRINT
+        std::cout << "entering do_nb_verlet, group size after: " << enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR].size() << std::endl;
         std::cout << "exiting do_nb_verlet, energy after: " <<  enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0] << std::endl;
         energy_sr_and_lr = enerd->grpp.energyGroupPairTerms[NonBondedEnergyTerms::CoulombSR][0];
         #endif
@@ -2097,16 +2099,21 @@ void do_force(FILE*                         fplog,
                                           forceOutNonbonded->forceWithShiftForces().force());
             wallcycle_start_nocount(wcycle, WallCycleCounter::Force);
             #ifdef MYDEBUGPRINT
-            std::ofstream fout("./force_shortrange_pswf.txt", std::ios::out);
+            std::ostringstream buffer_force_sr;
+            buffer_force_sr.precision(16);
+            buffer_force_sr << std::scientific;
+            std::ofstream fout("./force_shortrange_esp.txt", std::ios::out);
             fout << std::scientific << std::setprecision(16);
             std::cout << std::scientific << std::setprecision(16);
             for(int iforce = 0; iforce < fsize; iforce++)
             {
                 for(int idim = 0; idim < 3; idim++)
                 {
-                    fout << forceOutNonbonded->forceWithShiftForces().force()[iforce][idim] << std::endl;
+                    //fout << forceOutNonbonded->forceWithShiftForces().force()[iforce][idim] << std::endl;
+                    buffer_force_sr << forceOutNonbonded->forceWithShiftForces().force()[iforce][idim] << std::endl;
                 }
             }
+            fout << buffer_force_sr.str();
             std::cout << "short range first force: " <<
             forceOutNonbonded->forceWithShiftForces().force()[0][0] << " " <<
             forceOutNonbonded->forceWithShiftForces().force()[0][1] << " " <<
@@ -2206,6 +2213,7 @@ void do_force(FILE*                         fplog,
         #ifdef MYDEBUGPRINT
         std::cout<< "pme start, energy before: "<<  enerd->term[F_COUL_RECIP] << std::endl;
         std::cout<< "forcewithvirial size: "<< forceOutMtsLevel1->forceWithVirial().force().size() << std::endl;
+        /*
         int fsize_lb = forceOutMtsLevel1->forceWithVirial().force().size();
         std::ofstream fout_lb("./force_longrange_ewald_before.txt", std::ios::out);
         fout_lb << std::scientific << std::setprecision(16);
@@ -2217,6 +2225,7 @@ void do_force(FILE*                         fplog,
             }
         }
         fout_lb.close();
+        */
         #endif
         longRangeNonbondeds->calculate(fr->pmedata,
                                        cr,
@@ -2229,22 +2238,27 @@ void do_force(FILE*                         fplog,
                                        stepWork,
                                        ddBalanceRegionHandler);
         #ifdef MYDEBUGPRINT
+        std::ostringstream buffer_force_lr;
+        buffer_force_lr.precision(16);
+        buffer_force_lr << std::scientific;
         std::cout<< "pme end, energy after: "<<  enerd->term[F_COUL_RECIP] << std::endl;
         std::cout<< "forcewithvirial size: "<< forceOutMtsLevel1->forceWithVirial().force().size() << std::endl;
         int fsize_la = forceOutMtsLevel1->forceWithVirial().force().size();
-        std::ofstream fout_la("./force_longrange_ewald_after.txt", std::ios::out);
+        std::ofstream fout_la("./force_longrange_esp.txt", std::ios::out);
         fout_la << std::scientific << std::setprecision(16);
         for(int iforce = 0; iforce < fsize_la; iforce++)
         {
             for(int idim = 0; idim < 3; idim++)
             {
-                fout_la << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
+                //fout_la << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
+                buffer_force_lr << forceOutMtsLevel1->forceWithVirial().force()[iforce][idim] << std::endl;
             }
         }
+        fout_la << buffer_force_lr.str();
         fout_la.close();
         energy_sr_and_lr += enerd->term[F_COUL_RECIP];
         std::cout << "energy sr and lr: " << energy_sr_and_lr << std::endl;
-        std::ofstream fout("./energy_sr_lr_pswf.txt", std::ios::out);
+        std::ofstream fout("./energy_sr_lr_esp.txt", std::ios::out);
         fout << std::scientific << std::setprecision(16);
         fout << energy_sr_and_lr << std::endl;
         fout.close();

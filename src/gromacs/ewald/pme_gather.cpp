@@ -324,7 +324,7 @@ void gather_f_bsplines(const gmx_pme_t*          pme,
     /* Note that unrolling this loop by templating this function on order
      * deteriorates performance significantly with gcc5/6/7.
      */
-    #ifdef MYDEBUGPRINT
+    #ifdef MYDEBUGPRINTNO
     std::ofstream fout("./force_longrange_pswf.txt", std::ios::out);
     fout << std::scientific << std::setprecision(16);
     std::cout << std::scientific << std::setprecision(16);
@@ -359,12 +359,12 @@ void gather_f_bsplines(const gmx_pme_t*          pme,
             force[n][XX] += -coefficient * (f[XX] * nx * rxx);
             force[n][YY] += -coefficient * (f[XX] * nx * ryx + f[YY] * ny * ryy);
             force[n][ZZ] += -coefficient * (f[XX] * nx * rzx + f[YY] * ny * rzy + f[ZZ] * nz * rzz);
-            #ifdef MYDEBUGPRINT
+            #ifdef MYDEBUGPRINTNO
             fout << force[n][XX] << "\n" << force[n][YY] << "\n" << force[n][ZZ] << std::endl; 
             #endif
         }
     }
-    #ifdef MYDEBUGPRINT
+    #ifdef MYDEBUGPRINTNO
     std::cout << "long range first force: " << force[0][XX] << " " << force[0][YY] << " " << force[0][ZZ] << std::endl;
     std::cout << "long range last force: " << force[spline->n-1][XX] << " " << force[spline->n-1][YY] << " " << force[spline->n-1][ZZ] << std::endl;
     fout.close();

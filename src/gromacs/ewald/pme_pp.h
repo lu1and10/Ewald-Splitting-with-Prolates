@@ -114,6 +114,6 @@ void gmx_pme_receive_f(gmx::PmePpCommGpu*    pmePpCommGpu,
                        float*                pme_cycles);
 
 /*! \brief Tell our PME-only node to switch to a new grid size */
-void gmx_pme_send_switchgrid(const t_commrec* cr, ivec grid_size, real ewaldcoeff_q, real ewaldcoeff_lj);
+void gmx_pme_send_switchgrid(const t_commrec* cr, ivec grid_size, real ewaldcoeff_q, real ewaldcoeff_lj, real rcoulomb);
 
 #endif

@@ -262,6 +262,7 @@ static int gmx_pme_recv_coeffs_coords(struct gmx_pme_t*            pme,
                                       ivec*                        grid_size,
                                       real*                        ewaldcoeff_q,
                                       real*                        ewaldcoeff_lj,
+                                      real*                        rcoulomb,
                                       bool                         useGpuForPme,
                                       gmx::StatePropagatorDataGpu* stateGpu,
                                       const t_commrec&             cr,
@@ -314,6 +315,7 @@ static int gmx_pme_recv_coeffs_coords(struct gmx_pme_t*            pme,
             copy_ivec(cnb.grid_size, *grid_size);
             *ewaldcoeff_q  = cnb.ewaldcoeff_q;
             *ewaldcoeff_lj = cnb.ewaldcoeff_lj;
+            *rcoulomb = cnb.rcoulomb;
 
             status = pmerecvqxSWITCHGRID;
         }
@@ -730,6 +732,7 @@ int gmx_pmeonly(struct gmx_pme_t**              pmeFromRunnerPtr,
             /* Domain decomposition */
             ivec newGridSize;
             real ewaldcoeff_q = 0, ewaldcoeff_lj = 0;
+            real rcoulomb = 0;
             ret = gmx_pme_recv_coeffs_coords(pme,
                                              pme_pp.get(),
                                              &natoms,
@@ -743,6 +746,7 @@ int gmx_pmeonly(struct gmx_pme_t**              pmeFromRunnerPtr,
                                              &newGridSize,
                                              &ewaldcoeff_q,
                                              &ewaldcoeff_lj,
+                                             &rcoulomb,
                                              useGpuForPme,
                                              stateGpu.get(),
                                              *cr,
@@ -752,6 +756,7 @@ int gmx_pmeonly(struct gmx_pme_t**              pmeFromRunnerPtr,
             {
                 /* Switch the PME grid to newGridSize */
                 pme = gmx_pmeonly_switch(&pmedata, newGridSize, ewaldcoeff_q, ewaldcoeff_lj, cr, ir);
+                pme->pswf_rcoulomb = rcoulomb;
             }
 
             if (ret == pmerecvqxRESETCOUNTERS)

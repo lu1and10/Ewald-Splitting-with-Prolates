@@ -870,6 +870,7 @@ static void pme_load_balance(pme_load_balancing_t*          pme_lb,
             // Generate a new PME data structure, copying part of the old pointers.
             gmx_pme_reinit(
                     &newPmeData, cr, pme_lb->setup[0].pmedata, &ir, set->grid, set->ewaldcoeff_q, set->ewaldcoeff_lj);
+            newPmeData->pswf_rcoulomb = ic->rcoulomb;
             // Destroy the old structure. Must be done after gmx_pme_reinit in case pme_lb->cur is 0.
             if (set->pmedata != nullptr)
             {
@@ -882,7 +883,7 @@ static void pme_load_balance(pme_load_balancing_t*          pme_lb,
     else
     {
         /* Tell our PME-only rank to switch grid */
-        gmx_pme_send_switchgrid(cr, set->grid, set->ewaldcoeff_q, set->ewaldcoeff_lj);
+        gmx_pme_send_switchgrid(cr, set->grid, set->ewaldcoeff_q, set->ewaldcoeff_lj, ic->rcoulomb);
     }
 
     if (debug)

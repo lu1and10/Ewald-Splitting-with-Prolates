@@ -1133,6 +1133,7 @@ void gmx_pme_reinit(struct gmx_pme_t** pmedata,
     irc.nky                    = grid_size[YY];
     irc.nkz                    = grid_size[ZZ];
     irc.fourier_spacing        = ir->fourier_spacing;
+    irc.ewald_rtol             = ir->ewald_rtol;
 
     try
     {

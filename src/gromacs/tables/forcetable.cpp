@@ -478,19 +478,30 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
  * the third derivative, x_scale (unit 1/length)
  * and function tolerance.
  */
-static double spline3_table_scale(double third_deriv_max, double x_scale, double func_tol)
+static double spline3_table_scale(double third_deriv_max, double x_scale, double func_tol, double pswf_c = 0)
 {
     double deriv_tol;
     double sc_deriv, sc_func;
 
     /* Force tolerance: single precision accuracy */
     deriv_tol = GMX_FLOAT_EPS;
-    sc_deriv  = std::sqrt(third_deriv_max / (6 * 4 * deriv_tol * x_scale)) * x_scale;
+    if (pswf_c == 0) {
+        sc_deriv  = std::sqrt(third_deriv_max / (6 * 4 * deriv_tol * x_scale)) * x_scale;
+    }
+    else {
+        // empirical formula for estimating of the number of nodes used in cubic spline for at least 1e-7 accuracy
+        double poly_coeff[4] = {0.003024629901987, -0.330123348074091, 17.895611898878794, 61.376977516951435};
+        sc_deriv = poly_coeff[0] * pswf_c * pswf_c * pswf_c +
+                   poly_coeff[1] * pswf_c * pswf_c +
+                   poly_coeff[2] * pswf_c +
+                   poly_coeff[3];
+    }
     #ifdef MYDEBUGPRINT
     std::cout << "third_deriv_max: " << third_deriv_max << std::endl;
     std::cout << "deriv_tol: " << deriv_tol << std::endl;
     std::cout << "x_scale: " << x_scale << std::endl;
     std::cout << "sc_deriv: " << sc_deriv << std::endl;
+    std::cout << "pswf_c: " << pswf_c << std::endl;
     #endif
 
     /* Don't try to be more accurate on energy than the precision */
@@ -540,7 +551,7 @@ real ewald_spline3_table_scale_pswf(const interaction_const_t& ic,
         // etol = 0.1 * std::erfc(ic.ewaldcoeff_q * ic.rcoulomb);
         etol = ic.ewald_rtol;
 
-        sc_q = spline3_table_scale(pswf_x_d3, 1.0/ic.rcoulomb, etol);
+        sc_q = spline3_table_scale(pswf_x_d3, 1.0/ic.rcoulomb, etol, ic.pswfcoeff_q);
 
         if (debug)
         {

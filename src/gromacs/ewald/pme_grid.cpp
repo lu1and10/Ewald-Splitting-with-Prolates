@@ -612,6 +612,13 @@ static void pmegrid_init(pmegrid_t*           grid,
     }
     else
     {
+        // Should we increase the storage?
+        if (gridStorage->size() < static_cast<size_t>(gridsize))
+        {
+            // Resize the storage to fit the grid size
+            gridStorage->resize(gridsize);
+        }
+
         // Use already allocated memory
         gmx::ArrayRef<real> memoryView = *gridStorage;
 

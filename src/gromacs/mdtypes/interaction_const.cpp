@@ -123,9 +123,11 @@ static void initCoulombEwaldParameters(FILE*                fp,
     double pswf_c = 0.0, pswf_c0 = 0.0, psi0 = 0.0;
     double coeff_filter_tol = 1.0;
     long_range_real_energy_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol*1e-3, ic->pswfPolynomials->pswf_long_range_energy, pswf_c, pswf_c0);
+    long_range_real_energy_mono(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol*1e-3, ic->pswfPolynomials->pswf_long_range_energy_mono, pswf_c, pswf_c0);
     //ic->pswfcoeff_q = pswf_c;
     //ic->pswfcoeff_c0 = pswf_c0;
     long_range_real_force_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol, ic->pswfPolynomials->pswf_long_range_force);
+    long_range_real_force_mono(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol, ic->pswfPolynomials->pswf_long_range_force_mono);
 
     splitting_function_cheb(ir.ewald_rtol, ir.ewald_rtol*coeff_filter_tol, ic->pswfPolynomials->pswf_split_fun, pswf_c, pswf_c0, psi0);
     ic->pswfcoeff_q = pswf_c;

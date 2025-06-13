@@ -103,8 +103,10 @@ struct PSWF_Polynomials
     //AlignedVector<double> spread_fun_derivative;
     AlignedVector<real> pswf_long_range_energy;
     AlignedVector<real> pswf_long_range_force;
+    AlignedVector<real> pswf_long_range_energy_mono;
+    AlignedVector<real> pswf_long_range_force_mono;
     //AlignedVector<real> pswf_split_fun_fourier;
-    AlignedVector<real> pswf_split_fun;
+    AlignedVector<real> pswf_split_fun; // this seems to be not used in the code, but allocated in initCoulombEwaldParameters
 };
 
 /* The physical interaction parameters for non-bonded interaction calculations

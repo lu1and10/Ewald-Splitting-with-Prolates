@@ -148,6 +148,18 @@ inline static SimdReal cheb_eval(const SimdReal& x, int order, const real* coeff
     return SimdReal(coeff[0]) + b0 * y - b1;
 }
 
+inline static SimdReal mono_eval(const SimdReal& x, int order, const real* coeff) {
+    if (order == 0) return SimdReal(0.0);
+    if (order == 1) return SimdReal(coeff[0]);
+
+    SimdReal result(coeff[0]);
+    for (int i = 1; i < order; ++i)
+    {
+        result = fma(x, result, SimdReal(coeff[i]));
+    }
+    return result;
+}
+
 //! Specialized calculator for Ewald using an analytic approximation
 template<>
 class CoulombCalculator<KernelCoulombType::EwaldAnalytical>
@@ -178,11 +190,13 @@ public:
         const auto rdivrc = genArr<nR>(
                 [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
 
-        const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+        //const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+        const auto ewcorrV = genArr<nR>([&](int i) { return mono_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force_mono.size(), ic_.pswfPolynomials->pswf_long_range_force_mono.data()); });
 
         return  genArr<nR>([&](int i) { return fma(ewcorrV[i], rInvV[i], rInvExclV[i]); });
 
         /*
+        original code
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 
@@ -204,15 +218,18 @@ public:
         const auto rdivrc = genArr<nR>(
                 [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
 
-        const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+        //const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
+        const auto ewcorrV = genArr<nR>([&](int i) { return mono_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force_mono.size(), ic_.pswfPolynomials->pswf_long_range_force_mono.data()); });
 
         forceV =  genArr<nR>([&](int i) { return fma(ewcorrV[i], rInvV[i], rInvExclV[i]); });
 
-
+        //correctionEnergyV =
+                //genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_energy.size(), ic_.pswfPolynomials->pswf_long_range_energy.data()) * rInvV[i]; });
         correctionEnergyV =
-                genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_energy.size(), ic_.pswfPolynomials->pswf_long_range_energy.data()) * rInvV[i]; });
+                genArr<nR>([&](int i) { return mono_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_energy_mono.size(), ic_.pswfPolynomials->pswf_long_range_energy_mono.data()) * rInvV[i]; });
 
         /*
+        original code
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 

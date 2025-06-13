@@ -678,7 +678,7 @@ double mono_eval_template(const double* mono_coeff, double x) {
 template <int poly_order>
 double mono_eval_dispatch(int order, const double* mono_coeff, double x) {
     static_assert(poly_order <= MAX_CHEB_ORDER, "poly_order must be in the range [0, 30]");
-    if constexpr (poly_order == 0) { 
+    if constexpr (poly_order == 0) {
         return mono_eval_template<0>(mono_coeff, x);
     }
     else {
@@ -722,7 +722,7 @@ double cheb_eval_template(const double* cheb_coeff, double x, double a, double b
 template <int poly_order>
 double cheb_eval_dispatch(int order, const double* cheb_coeff, double x, double a, double b) {
     static_assert(poly_order <= MAX_CHEB_ORDER, "poly_order must be in the range [0, 30]");
-    if constexpr (poly_order == 0) { 
+    if constexpr (poly_order == 0) {
         return cheb_eval_template<0>(cheb_coeff, x, a, b);
     }
     else {
@@ -1433,7 +1433,7 @@ void spread_window_real_space_der_mono(int P, double tol, double tol_coeff, Alig
     #ifdef MYDEBUGPRINT
     std::cout << "spread der dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
     #endif
-    
+
     //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
     monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
 
@@ -1568,7 +1568,7 @@ void spread_window_real_space_mono(int P, double tol, double tol_coeff, AlignedV
     #ifdef MYDEBUGPRINT
     std::cout << "spread dof = " << dof << " max_order = " << max_order << " nnodes = " << nnodes << std::endl;
     #endif
-    
+
     //monomial_interp_1d(max_order, nnodes, fn_v, coeffs);
     monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
 
@@ -1793,6 +1793,72 @@ void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<rea
     }
 }
 
+void long_range_real_energy_mono(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0) {
+    prolc180(tol, c);
+
+    c0 = prolate0_int_eval(c, 1.0);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        double val = prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    if(max_order > MAX_MONO_ORDER) {
+        std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        max_order = MAX_MONO_ORDER;
+    }
+
+    #ifdef MYDEBUGPRINT
+    std::cout << "long_range_real_energy_mono order: " << max_order << std::endl;
+    #endif
+
+    coeffs.resize(dof * max_order, 0.0);
+
+    AlignedVector<double> coeffs_tmp(dof * max_order);
+    int nnodes = (int)max_order*1.75;
+    cheb_nodes_1d(nnodes, nodes, 0, 1);
+    fn_v.resize(dof * nnodes);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < nnodes; i++) {
+            fn_v[idof * nnodes + i] = f(c0, c, nodes[i]);
+        }
+    }
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
+
+    for (size_t i = 0; i < coeffs_tmp.size(); i++) {
+        coeffs[i] = coeffs_tmp[i];
+    }
+}
+
 void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0) {
     prolc180(tol, c);
 
@@ -1893,6 +1959,75 @@ void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<real
         for (int j = 0; j < max_order; j++) {
             cheb_coeff_filtered[i * max_order + j] = cheb_coeff[i * order + j];
         }
+    }
+}
+
+void long_range_real_force_mono(double tol, double tol_coeff, AlignedVector<real>& coeffs) {
+    double c;
+    prolc180(tol, c);
+
+    double c0 = prolate0_int_eval(c, 1.0);
+
+    int order = MAX_CHEB_ORDER;
+    AlignedVector<double> nodes;
+    cheb_nodes_1d(order, nodes);
+
+    auto f = [](double c0, double c, double x) {
+        //double val = prolate0_int_eval(c, x) / c0 - x / c0 * prolate0_eval(c, x);
+        //val = 1 - val;
+        double val = x / c0 * prolate0_eval(c, x) - prolate0_int_eval(c, x) / c0;
+        return val;
+    };
+    int dof = 1;
+    AlignedVector<double> fn_v(dof * order);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < order; i++) {
+            fn_v[idof * order + i] = f(c0, c, nodes[i]);
+        }
+    }
+
+    AlignedVector<double> cheb_coeff;
+    cheb_interp_1d(order, fn_v, cheb_coeff);
+    int max_order = -1;
+    // filter chebyshev coefficients
+    double max_coeffs = 0.0;
+    for (int idof = 0; idof < dof; idof++) {
+        max_coeffs = 0.0;
+        for (int i = 0; i < order; i++) {
+            max_coeffs = std::max<double>(max_coeffs, std::abs(cheb_coeff[idof * order + i]));
+        }
+        for (int i = 0; i < order; i++) {
+            if (std::abs(cheb_coeff[idof * order + i]) > tol_coeff * max_coeffs) {
+                max_order = std::max<int>(max_order, i + 1);
+            }
+        }
+    }
+
+    if(max_order > MAX_MONO_ORDER) {
+        std::cout << "max_order = " << max_order << " > MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        std::cout << "max_order set to MAX_MONO_ORDER = " << MAX_MONO_ORDER << std::endl;
+        max_order = MAX_MONO_ORDER;
+    }
+
+    #ifdef MYDEBUGPRINT
+    std::cout << "long_range_real_force_mono order: " << max_order << std::endl;
+    #endif
+
+    coeffs.resize(dof * max_order, 0.0);
+
+    AlignedVector<double> coeffs_tmp(dof * max_order);
+    int nnodes = (int)max_order*1.75;
+    cheb_nodes_1d(nnodes, nodes, 0, 1);
+    fn_v.resize(dof * nnodes);
+    for (int idof = 0; idof < dof; idof++) {
+        for (int i = 0; i < nnodes; i++) {
+            fn_v[idof * nnodes + i] = f(c0, c, nodes[i]);
+        }
+    }
+    monomial_interp_1d(max_order, nnodes, fn_v, coeffs_tmp);
+
+    for (size_t i = 0; i < coeffs_tmp.size(); i++) {
+        coeffs[i] = coeffs_tmp[i];
     }
 }
 

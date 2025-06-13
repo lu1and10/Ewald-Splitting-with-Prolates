@@ -449,7 +449,7 @@ struct gmx_pme_t
     //AlignedVector<double> pswf_long_range_force;
     AlignedVector<real> pswf_split_fun_fourier;
     AlignedVector<real> pswf_split_fun_fourier_der;
-    AlignedVector<real> pswf_split_fun;
+    AlignedVector<real> pswf_split_fun; // this seems to be not used anywhere, but is allocated in gmx_pme_init()
 
     // The B-spline moduli coefficients
     std::array<std::vector<real>, DIM> bsp_mod;

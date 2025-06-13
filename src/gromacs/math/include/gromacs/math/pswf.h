@@ -66,9 +66,11 @@ void spread_window_real_space(int P, double tol, double tol_coeff, AlignedVector
 void spread_window_fourier_space(double tol, double tol_coeff, AlignedVector<real>& coeffs);
 // 3. long range energy, tol, tol_coeff, domain [0.0, 1.0]
 void long_range_real_energy_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0);
+void long_range_real_energy_mono(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& c, double& c0);
 void long_range_real_energy(double tol, double tol_coeff, AlignedVector<double>& coeffs, double& c, double& c0);
 // 4. long range force, tol, tol_coeff, domain [0.0, 1.0]
 void long_range_real_force_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs);
+void long_range_real_force_mono(double tol, double tol_coeff, AlignedVector<real>& coeffs);
 void long_range_real_force(double tol, double tol_coeff, AlignedVector<double>& coeffs);
 // 5. splitting function fourier space, tol, tol_coeff, domain [0.0, 1.0]
 void splitting_function_fourier_space_cheb(double tol, double tol_coeff, AlignedVector<real>& coeffs, double& lambda);

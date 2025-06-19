@@ -10,7 +10,7 @@
 
 #define Long int64_t
 #define MAX_CHEB_ORDER 30
-#define MAX_MONO_ORDER 16
+#define MAX_MONO_ORDER 20
 
 template<typename T>
 using AlignedVector = std::vector<T, gmx::AlignedAllocator<T>>;

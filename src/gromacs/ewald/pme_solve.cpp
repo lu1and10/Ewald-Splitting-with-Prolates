@@ -188,7 +188,7 @@ void PmeSolve::getLJEnergyAndVirial(PmeOutput* output) const
 
 #if defined PME_SIMD_SOLVE
 /* Calculate exponentials through SIMD */
-inline static SimdReal poly_eval(SimdReal& x, int order, const real* coeff) {
+static inline SimdReal gmx_simdcall poly_eval(SimdReal& x, int order, const real* coeff) {
     SimdReal result = SimdReal(coeff[order-1]);
     for (int i = order-2; i >= 0; i--) {
         result = result * x + SimdReal(coeff[i]);
@@ -196,7 +196,7 @@ inline static SimdReal poly_eval(SimdReal& x, int order, const real* coeff) {
     return result;
 }
 // TODO[libin]: reverse order of coeffs
-inline static SimdReal cheb_eval(SimdReal& x, int order, const real* coeff) {
+static inline SimdReal gmx_simdcall cheb_eval(SimdReal& x, int order, const real* coeff) {
     if (order == 0) return SimdReal(0.0);
     if (order == 1) return SimdReal(coeff[0]);
 

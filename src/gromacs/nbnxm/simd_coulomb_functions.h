@@ -127,7 +127,7 @@ private:
     const real selfEnergy_;
 };
 
-inline static SimdReal cheb_eval(const SimdReal& x, int order, const real* coeff) {
+static inline SimdReal gmx_simdcall cheb_eval(const SimdReal& x, int order, const real* coeff) {
     if (order == 0) return SimdReal(0.0);
     if (order == 1) return SimdReal(coeff[0]);
 
@@ -148,7 +148,7 @@ inline static SimdReal cheb_eval(const SimdReal& x, int order, const real* coeff
     return SimdReal(coeff[0]) + b0 * y - b1;
 }
 
-inline static SimdReal mono_eval(const SimdReal& x, int order, const real* coeff) {
+static inline SimdReal gmx_simdcall mono_eval(const SimdReal& x, int order, const real* coeff) {
     if (order == 0) return SimdReal(0.0);
     if (order == 1) return SimdReal(coeff[0]);
 
@@ -172,7 +172,7 @@ public:
         //selfEnergy_(0.5_real * ic.ewaldcoeff_q * M_2_SQRTPI) // beta/sqrt(pi),
         pswf_c0_(ic.pswfcoeff_c0),
         pswf_psi0_(ic.pswfcoeff_psi0),
-        rcoulomb_(ic.rcoulomb),
+        rcoulomb_inv_(1.0/ic.rcoulomb),
         ic_(ic)
     {
     }
@@ -188,7 +188,7 @@ public:
                                               const std::array<SimdBool, nR>& withinCutoffV)
     {
         const auto rdivrc = genArr<nR>(
-                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
+                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) * rcoulomb_inv_; });
 
         //const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
         const auto ewcorrV = genArr<nR>([&](int i) { return mono_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force_mono.size(), ic_.pswfPolynomials->pswf_long_range_force_mono.data()); });
@@ -216,7 +216,7 @@ public:
                                              std::array<SimdReal, energySize>& correctionEnergyV)
     {
         const auto rdivrc = genArr<nR>(
-                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) / rcoulomb_; });
+                [&](int i) { return selectByMask(rSquaredV[i]*rInvV[i], withinCutoffV[i]) * rcoulomb_inv_; });
 
         //const auto ewcorrV = genArr<nR>([&](int i) { return cheb_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force.size(), ic_.pswfPolynomials->pswf_long_range_force.data()); });
         const auto ewcorrV = genArr<nR>([&](int i) { return mono_eval(rdivrc[i], ic_.pswfPolynomials->pswf_long_range_force_mono.size(), ic_.pswfPolynomials->pswf_long_range_force_mono.data()); });
@@ -256,7 +256,7 @@ private:
     //! pswf psi0
     const SimdReal pswf_psi0_;
     //! pswf rcoulomb
-    const SimdReal rcoulomb_;
+    const SimdReal rcoulomb_inv_;
     //! Interaction constants
     const interaction_const_t& ic_;
 };

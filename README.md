@@ -42,24 +42,24 @@ interactions are the only user-visible differences and are discussed below.
 The native GROMACS `.mdp` file exposes many parameters that most users neither need nor benefit from tuning. In ESP, 
 the algorithmic choices that matter boil down to **two** quantities:
 
-- the real-space cutoff radius \( r_c \), and  
-- the target relative **force** error \( \epsilon \).
+- the real-space cutoff radius $r_c$, and  
+- the target relative **force** error  $\epsilon$.
 
-For Coulomb interactions, \( r_c \) splits work between the near-field (evaluated directly with the residual kernel) 
+For Coulomb interactions, $r_c$ splits work between the near-field (evaluated directly with the residual kernel) 
 and the long-range part (handled by the fast Ewald method).
 
 ## Practical note on the cutoff
 Most MD setups also include Lennard–Jones (van der Waals) interactions that are sharply truncated at the same cutoff. 
-Using a very small \( r_c \) can therefore introduce large errors for Lennard–Jones, independent of the Coulomb treatment. 
+Using a very small $r_c$ can therefore introduce large errors for Lennard–Jones, independent of the Coulomb treatment. 
 **We recommend keeping your current cutoff** (as in native GROMACS) for now. We are implementing ESP for the 
-Lennard–Jones potential; once available, you will be able to reduce \( r_c \) to accelerate simulations **without** sacrificing accuracy.
+Lennard–Jones potential; once available, you will be able to reduce $r_c$ to accelerate simulations **without** sacrificing accuracy.
 
 ## Parameters to set
 
-- **`rcoulomb`** (the cutoff \( r_c \)):  
+- **`rcoulomb`** (the cutoff $r_c$):  
   Keep this equal to your usual production value to avoid Lennard–Jones truncation artifacts until ESP–LJ is released.
 
-- **`ewald_rtol`** (target tolerance \( \epsilon \)):  
+- **`ewald_rtol`** (target tolerance $\epsilon$):  
   In native GROMACS this is commonly interpreted as a tolerance for **potential** accuracy and is often set to `1e-5`.  
   **In this fork, `ewald_rtol` specifies the desired *force* accuracy.** Typical choices are:
   - `1e-3` to `1e-4` for most MD simulations,
@@ -74,7 +74,7 @@ Lennard–Jones potential; once available, you will be able to reduce \( r_c \) 
 ## Parameters you do **not** need to set
 
 You do **not** need to adjust PME/Fourier grid controls (e.g., Fourier spacing or FFT grid sizes). 
-ESP computes the required k-space parameters internally to meet your `ewald_rtol` target at the chosen \( r_c \).
+ESP computes the required k-space parameters internally to meet your `ewald_rtol` target at the chosen $r_c$.
 
 In summary: set a sensible `rcoulomb`, choose `ewald_rtol` for your **force** accuracy needs (typically `1e-3`–`1e-4`), 
 pick `pme_order` = 4 or 5, and leave the rest to ESP’s internal autotuning.
@@ -85,7 +85,7 @@ If GROMACS-ESP is useful in your work, please star this repository and cite both
 
 ### Preferred citation (BibTeX)
 ```bibtex
-@misc{liang2025acceleratingfastewaldsummation,
+@misc{liang2025arxiv,
   title         = {Accelerating Fast Ewald Summation with Prolates for Molecular Dynamics Simulations},
   author        = {Jiuyang Liang and Libin Lu and Alex Barnett and Leslie Greengard and Shidong Jiang},
   year          = {2025},

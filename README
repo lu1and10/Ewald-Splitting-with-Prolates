@@ -1,43 +1,125 @@
-This is a fork of the [GROMACS](https://github.com/gromacs/gromacs)
-molecular dynamics software.
-This fork includes custom modifications for the ESP(Ewald summation with
-prolate spheroidal wave functions) method.
+# GROMACS-ESP
 
-The ESP method code modifications main contributors:
-* Jiuyang Liang
-* Libin Lu
-* Alex Barnett
-* Leslie Greengard
-* Shidong Jiang
+GROMACS-ESP is a fork of [GROMACS](https://github.com/gromacs/gromacs) that preserves the GROMACS user 
+interface while replacing the treatment of Coulomb interactions with ESP—an Ewald-summation variant 
+based on prolate spheroidal wave functions (PSWFs). Without any loss of accuracy, ESP alters the fast Ewald pipeline in two places. 
+First, for kernel splitting it uses PSWFs instead of Gaussians, which—thanks to the optimal concentration 
+of PSWFs among band-limited functions—significantly reduces the required Fourier grid. With everything else 
+equal, the FFT length drops by about a factor of two per dimension at high accuracy (≈8× in 3D). The 
+residual kernel also vanishes at the real-space cutoff, eliminating any need for an “energy shift.” 
+Second, for particle–mesh operations ESP employs PSWFs in place of the B-splines used by SPME. For comparable 
+accuracy without k-space upsampling, PSWFs require fewer neighboring grid points (e.g., ~8 vs ~12 for five-digit accuracy). 
+In contrast, native GROMACS typically sets the spreading/interpolation order to P=5 for MPI runs and P=4 for 
+single-core low-accuracy runs, which forces substantial Fourier-space upsampling. Consequently, at the same cutoff 
+radius, native GROMACS often needs a much larger FFT grid—even for ≈10⁻³ force accuracy—whereas ESP achieves similar 
+accuracy with far shorter transforms, yielding roughly a sixfold reduction in FFT length when other parameters are held fixed.
 
-More data files and detailed descriptions will be available shortly.
-If you have any questions, please do not hesitate to contact me via email
-at llu@flatironinstitute.org.
+# Download Instructions
 
-**Note:** This codebase is not an official version of GROMACS.
-It is independently maintained and modified.
+This repository is self-contained with no external submodules, so a standard `git clone` is sufficient.
 
-               Welcome to the official version of GROMACS!
+```bash
+git clone https://github.com/lu1and10/Ewald-Splitting-with-Prolates.git
+```
 
-If you are familiar with Unix, it should be fairly trivial to compile and
-install GROMACS. GROMACS uses only the CMake build system, and our
-installation guide can be found at
-http://manual.gromacs.org/documentation/current/install-guide/index.html
+# Installation Guide
 
-Visit http://forums.gromacs.org/ for discussions and advice.
-Report bugs at https://gitlab.com/gromacs/gromacs/-/issues
-Of course we will do our utmost to help you with any problems, but PLEASE 
-READ THE INSTALLATION INSTRUCTIONS BEFORE CONTACTING US!
+Installation is identical to native GROMACS. Follow the official GROMACS installation guide for build and configuration details:  
+<https://manual.gromacs.org/documentation/current/install-guide/index.html>
 
-There are also several other online resources available from the homepage, 
-and special information for developers.
+# User Guide
 
-If you use GROMACS for research (or other purposes) make sure to reference
-the correct version of the code. The CITATION.cff file next to this README
-contains all metadata useful for citation.
+The user interface is identical to native GROMACS, so you can rely on the official GROMACS manual for general 
+usage—including the molecular topology file (`.top`), molecular dynamics parameter file (`.mdp`), run input file (`.tpr`), 
+and related workflows:  
+<https://manual.gromacs.org/current/user-guide/index.html>
 
-If you are a developer, or change the source for any other reason, check
-out http://www.gromacs.org/development.
+This fork changes only the algorithms used for Coulomb interaction calculations. The `.mdp` options relevant to Coulomb 
+interactions are the only user-visible differences and are discussed below.
+
+# Changes to the `.mdp` file
+
+The native GROMACS `.mdp` file exposes many parameters that most users neither need nor benefit from tuning. In ESP, 
+the algorithmic choices that matter boil down to **two** quantities:
+
+- the real-space cutoff radius \( r_c \), and  
+- the target relative **force** error \( \epsilon \).
+
+For Coulomb interactions, \( r_c \) splits work between the near-field (evaluated directly with the residual kernel) 
+and the long-range part (handled by the fast Ewald method).
+
+## Practical note on the cutoff
+Most MD setups also include Lennard–Jones (van der Waals) interactions that are sharply truncated at the same cutoff. 
+Using a very small \( r_c \) can therefore introduce large errors for Lennard–Jones, independent of the Coulomb treatment. 
+**We recommend keeping your current cutoff** (as in native GROMACS) for now. We are implementing ESP for the 
+Lennard–Jones potential; once available, you will be able to reduce \( r_c \) to accelerate simulations **without** sacrificing accuracy.
+
+## Parameters to set
+
+- **`rcoulomb`** (the cutoff \( r_c \)):  
+  Keep this equal to your usual production value to avoid Lennard–Jones truncation artifacts until ESP–LJ is released.
+
+- **`ewald_rtol`** (target tolerance \( \epsilon \)):  
+  In native GROMACS this is commonly interpreted as a tolerance for **potential** accuracy and is often set to `1e-5`.  
+  **In this fork, `ewald_rtol` specifies the desired *force* accuracy.** Typical choices are:
+  - `1e-3` to `1e-4` for most MD simulations,
+  - smaller values only if your application demands tighter force accuracy.
+
+- **`pme_order`** (PSWF spreading/interpolation order):  
+  This controls the order of the prolate spheroidal basis used for particle–mesh operations.
+  - `pme_order = 4` → suitable for ~3 digits of accuracy,  
+  - `pme_order = 5` → suitable for ~4 digits of accuracy.  
+  Values above 5 are rarely necessary.
+
+## Parameters you do **not** need to set
+
+You do **not** need to adjust PME/Fourier grid controls (e.g., Fourier spacing or FFT grid sizes). 
+ESP computes the required k-space parameters internally to meet your `ewald_rtol` target at the chosen \( r_c \).
+
+In summary: set a sensible `rcoulomb`, choose `ewald_rtol` for your **force** accuracy needs (typically `1e-3`–`1e-4`), 
+pick `pme_order` = 4 or 5, and leave the rest to ESP’s internal autotuning.
+
+# Citing
+
+If GROMACS-ESP is useful in your work, please star this repository and cite both the software and the reference below.
+
+### Preferred citation (BibTeX)
+```bibtex
+@misc{liang2025acceleratingfastewaldsummation,
+  title         = {Accelerating Fast Ewald Summation with Prolates for Molecular Dynamics Simulations},
+  author        = {Jiuyang Liang and Libin Lu and Alex Barnett and Leslie Greengard and Shidong Jiang},
+  year          = {2025},
+  eprint        = {2505.09727},
+  archivePrefix = {arXiv},
+  primaryClass  = {math.NA},
+  url           = {https://arxiv.org/abs/2505.09727}
+}
+```
+
+# Main developers
+
+- **Libin Lu** — Lead developer  
+  *Flatiron Institute, Simons Foundation*
+- **Jiuyang Liang**  
+  *Flatiron Institute, Simons Foundation*
+- **Alex Barnett**  
+  *Flatiron Institute, Simons Foundation*
+- **Leslie Greengard**  
+  *Flatiron Institute, Simons Foundation*
+- **Shidong Jiang**  
+  *Flatiron Institute, Simons Foundation*
+
+
+# Availability & Contact
+
+More data files and detailed documentation will be available soon. If you have questions or feedback, 
+please email **Libin Lu** at <llu@flatironinstitute.org>.
+
+> **Disclaimer:** This codebase is **not** an official release of GROMACS. It is independently 
+maintained and modified.
+
+
+              
 
                                * * * * *
 
@@ -67,48 +149,3 @@ Sorry for the hard wording, but it is meant to protect YOUR research results!
 
                                * * * * *
 
-The development of GROMACS is mainly funded by academic research grants. 
-To help us fund development, we humbly ask that you cite the GROMACS papers:
-
-* GROMACS: A message-passing parallel molecular dynamics implementation
-  H.J.C. Berendsen, D. van der Spoel and R. van Drunen
-  Comp. Phys. Comm. 91, 43-56 (1995)
-  DOI: https://doi.org/10.1016/0010-4655(95)00042-E
- 
-* GROMACS 4: Algorithms for highly efficient, load-balanced, and scalable
-  molecular simulation
-  B. Hess and C. Kutzner and D. van der Spoel and E. Lindahl
-  J. Chem. Theory Comput. 4 (2008) pp. 435-447
-  DOI: https://doi.org/10.1021/ct700301q
-
-* GROMACS 4.5: a high-throughput and highly parallel open source
-  molecular simulation toolkit
-  Sander Pronk, Szilárd Páll, Roland Schulz, Per Larsson, Pär Bjelkmar,
-  Rossen Apostolov, Michael R. Shirts, Jeremy C. Smith, Peter M. Kasson,
-  David van der Spoel, Berk Hess, Erik Lindahl.
-  Bioinformatics 29 (2013) pp. 845-54
-  DOI: https://doi.org/10.1093/bioinformatics/btt055
-
-* Tackling Exascale Software Challenges in Molecular Dynamics Simulations
-  with GROMACS
-  Szilárd Páll, Mark J. Abraham, Carsten Kutzner, Berk Hess, Erik Lindahl
-  In S. Markidis & E. Laure (Eds.), Solving Software Challenges for Exascale,
-  Lecture Notes for Computer Science, 8759 (2015) pp. 3–27
-  DOI: https://doi.org/10.1007/978-3-319-15976-8_1
-
-* GROMACS: High performance molecular simulations through multi-level parallelism from laptops to supercomputers
-  M. J. Abraham, T. Murtola, R. Schulz, S. Páll, J. C. Smith, B. Hess, E. Lindahl,
-  SoftwareX, 1, (2015), 19-25
-  DOI: https://doi.org/10.1016/j.softx.2015.06.001
-
-There are a lot of cool features we'd like to include in future versions,
-but our resources are limited. All kinds of donations are welcome, both in 
-form of code, hardware and funding! Industrial users who choose to pay
-for a license pro bono (it is still LGPL and can be redistributed freely) or
-contribute in other ways are listed as GROMACS supporters on our webpages. 
-Don't hesitate to contact us if you are interested.
-
-
-                       Good luck with your simulations!
-
-                              The GROMACS Crew

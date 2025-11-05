@@ -112,14 +112,14 @@ If GROMACS-ESP is useful in your work, please star this repository and cite both
 
 # Availability & Contact
 
-More data files and detailed documentation will be available soon. If you have questions or feedback, 
+The datasets and input files for testing the PME and ESP methods can be found in the gromacs_bench directory.
+More detailed documentation will be available soon. If you have questions or feedback,
 please email **Libin Lu** at <llu@flatironinstitute.org>.
 
 > **Disclaimer:** This codebase is **not** an official release of GROMACS. It is independently 
 maintained and modified.
 
 
-              
 
                                * * * * *
 

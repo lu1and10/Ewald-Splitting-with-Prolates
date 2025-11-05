@@ -9,10 +9,10 @@ based on prolate spheroidal wave functions (PSWFs).
 Molecular dynamics (MD) simulations are essential tools in materials science, computational chemistry, structural biology, and drug discovery. Fast Ewald summation is
 the most widely used method for evaluating long-range Coulomb interactions in MD, and it
 remains a performance bottleneck in all major open-source and commercial MD packages,
-particularly in massively parallel simulations involving $10^9$-$10^{12}$ time steps. Notably, LAMMPS ($>55000$ citations on Google Scholar), 
-[GROMACS](https://scholar.google.nl/citations?user=IHbqqNEAAAAJ&hl=nl)($>85000$ citations), and NAMD
-all rely on Ewald-based approaches, such as the (Smooth) Particle-Mesh Ewald (PME/SPME, $>55000$ citations)
-and the Particle-Particle-Particle-Mesh (PPPM, $>12000$ citations) methods. 
+particularly in massively parallel simulations involving $10^9$-$10^{12}$ time steps. Notably, LAMMPS ($>80,000$ citations on Google Scholar), 
+[GROMACS](https://scholar.google.nl/citations?user=IHbqqNEAAAAJ&hl=nl)($>85,000$ citations), and NAMD
+all rely on Ewald-based approaches, such as the (Smooth) Particle-Mesh Ewald ([PME/SPME](https://scholar.google.com/citations?user=y4Ts-LkAAAAJ&hl=en), $>57,000$ citations)
+and the Particle-Particle-Particle-Mesh (PPPM, $>12,000$ citations) methods. 
 
 # Introduction
 

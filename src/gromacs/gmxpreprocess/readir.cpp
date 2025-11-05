@@ -103,6 +103,7 @@
 #include "gromacs/utility/stringcompare.h"
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
+#include "gromacs/math/pswf.h"
 
 #define NOGID 255
 
@@ -2463,12 +2464,6 @@ void get_ir(const char*     mdparin,
     ir->tabext = get_ereal(&inp, "table-extension", 1.0, wi);
     printStringNoNewline(&inp, "Separate tables between energy group pairs");
     setStringEntry(&inp, "energygrp-table", inputrecStrings->egptable, nullptr);
-    printStringNoNewline(&inp, "Spacing for the PME/PPPM FFT grid");
-    ir->fourier_spacing = get_ereal(&inp, "fourierspacing", 0.12, wi);
-    printStringNoNewline(&inp, "FFT grid size, when a value is 0 fourierspacing will be used");
-    ir->nkx = get_eint(&inp, "fourier-nx", 0, wi);
-    ir->nky = get_eint(&inp, "fourier-ny", 0, wi);
-    ir->nkz = get_eint(&inp, "fourier-nz", 0, wi);
     printStringNoNewline(&inp, "EWALD/PME/PPPM parameters");
     ir->pme_order              = get_eint(&inp, "pme-order", 4, wi);
     ir->ewald_rtol             = get_ereal(&inp, "ewald-rtol", 0.00001, wi);
@@ -2476,6 +2471,23 @@ void get_ir(const char*     mdparin,
     ir->ljpme_combination_rule = getEnum<LongRangeVdW>(&inp, "lj-pme-comb-rule", wi);
     ir->ewald_geometry         = getEnum<EwaldGeometry>(&inp, "ewald-geometry", wi);
     ir->epsilon_surface        = get_ereal(&inp, "epsilon-surface", 0.0, wi);
+
+    double esp_coulomb_splitting_c = get_prolate_c(ir->ewald_rtol);
+    char buf_tmp[64];
+    snprintf(buf_tmp, sizeof(buf_tmp), "esp_coulomb_splitting_c is %.6f", esp_coulomb_splitting_c);
+    puts(buf_tmp);
+    printStringNoNewline(&inp, buf_tmp);
+    // fourier spacing is pi * rcoulomb / prolate_splitting_parameter_c
+    double esp_coulomb_fourier_spacing = ir->rcoulomb * 3.1415926535897932384626433832795028841L / esp_coulomb_splitting_c;
+    snprintf(buf_tmp, sizeof(buf_tmp), "esp_coulomb_fourier_spacing is %.6f", esp_coulomb_fourier_spacing);
+    puts(buf_tmp);
+    printStringNoNewline(&inp, buf_tmp);
+    printStringNoNewline(&inp, "Spacing for the PME/PPPM FFT grid");
+    ir->fourier_spacing = get_ereal(&inp, "fourierspacing", esp_coulomb_fourier_spacing, wi);
+    printStringNoNewline(&inp, "FFT grid size, when a value is 0 fourierspacing will be used");
+    ir->nkx = get_eint(&inp, "fourier-nx", 0, wi);
+    ir->nky = get_eint(&inp, "fourier-ny", 0, wi);
+    ir->nkz = get_eint(&inp, "fourier-nz", 0, wi);
 
     /* Implicit solvation is no longer supported, but we need grompp
        to be able to refuse old .mdp files that would have built a tpr

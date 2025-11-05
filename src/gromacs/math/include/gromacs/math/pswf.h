@@ -40,6 +40,7 @@ double mono_eval(int order, const double* mono_coeff, double x);
 double cheb_eval(int order, const double* cheb_coeff, double x, double a = 0, double b = 1);
 
 // prolate functions
+double get_prolate_c(double tol);
 void prolc180_der3(double eps, double& der3);
 // prolate0 functor
 struct Prolate0Fun;

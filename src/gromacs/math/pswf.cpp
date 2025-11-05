@@ -818,6 +818,12 @@ static inline void prolc180(double eps, double& c) {
     c = cs[i - 1];
 }
 
+double get_prolate_c(double tol) {
+    double c;
+    prolc180(tol, c);
+    return c;
+}
+
 static inline void prosinin(double c, const double* ts, const double* whts, const double* fs,
                             double x, int n, double& rint, double& derrint) {
     rint = 0.0;

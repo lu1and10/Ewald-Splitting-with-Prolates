@@ -9,7 +9,7 @@ based on prolate spheroidal wave functions (PSWFs).
 Molecular dynamics (MD) simulations are essential tools in materials science, computational chemistry, structural biology, and drug discovery. Fast Ewald summation is
 the most widely used method for evaluating long-range Coulomb interactions in MD, and it
 remains a performance bottleneck in all major open-source and commercial MD packages,
-particularly in massively parallel simulations involving $10^9$-$10^{12}$ time steps. Notably, LAMMPS ($>80,000$ citations on Google Scholar), 
+particularly in massively parallel simulations involving $10^9 - 10^{12}$ time steps. Notably, LAMMPS ($>80,000$ citations on Google Scholar), 
 [GROMACS](https://scholar.google.nl/citations?user=IHbqqNEAAAAJ&hl=nl)($>85,000$ citations), and NAMD
 all rely on Ewald-based approaches, such as the (Smooth) Particle-Mesh Ewald ([PME/SPME](https://scholar.google.com/citations?user=y4Ts-LkAAAAJ&hl=en), $>57,000$ citations)
 and the Particle-Particle-Particle-Mesh (PPPM, $>12,000$ citations) methods. 
@@ -97,7 +97,7 @@ pick `pme_order` = 4 or 5, and leave the rest to ESP’s internal autotuning.
 
 ## Overall accuracy of MD simulations
 
-The overall accuracy of molecular dynamics (MD) simulations is influenced by several sources of error: modeling (force-field and parameterization), system preparation and input files, and numerical error from the time integrator and related algorithms. Even though our implementation ensures that forces are evaluated to the requested tolerance at each time step, the fidelity of the trajectory is ultimately constrained by these factors and by other components of the original GROMACS code base (e.g., integrators, constraints, thermostats).
+The overall accuracy of molecular dynamics (MD) simulations is influenced by several sources of error: modeling (force-field and parameterization), system preparation and input files, and numerical error from the time integrator and related algorithms. Even though our implementation ensures that forces are evaluated to the requested tolerance at each time step, the fidelity of the trajectory is ultimately constrained by these factors and by other components of the original GROMACS code base (e.g., integrators, constraints, thermostats). Note that the potential/energy is typically at least ten times more accurate than the force field.
 
 # Citing
 

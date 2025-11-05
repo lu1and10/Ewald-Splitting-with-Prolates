@@ -2,7 +2,21 @@
 
 GROMACS-ESP is a fork of [GROMACS](https://github.com/gromacs/gromacs) that preserves the GROMACS user 
 interface while replacing the treatment of Coulomb interactions with ESP—an Ewald-summation variant 
-based on prolate spheroidal wave functions (PSWFs). Without any loss of accuracy, ESP alters the fast Ewald pipeline in two places. 
+based on prolate spheroidal wave functions (PSWFs). 
+
+# Background
+
+Molecular dynamics (MD) simulations are essential tools in materials science, computational chemistry, structural biology, and drug discovery. Fast Ewald summation is
+the most widely used method for evaluating long-range Coulomb interactions in MD, and it
+remains a performance bottleneck in all major open-source and commercial MD packages,
+particularly in massively parallel simulations involving $10^9$-$10^{12}$ time steps. Notably, LAMMPS ($>55000$ citations on Google Scholar), 
+[GROMACS](https://scholar.google.nl/citations?user=IHbqqNEAAAAJ&hl=nl)($>85000$ citations), and NAMD
+all rely on Ewald-based approaches, such as the (Smooth) Particle-Mesh Ewald (PME/SPME, $>55000$ citations)
+and the Particle-Particle-Particle-Mesh (PPPM, $>12000$ citations) methods. 
+
+# Introduction
+
+Without any loss of accuracy, ESP alters the fast Ewald pipeline in two places. 
 First, for kernel splitting it uses PSWFs instead of Gaussians, which—thanks to the optimal concentration 
 of PSWFs among band-limited functions—significantly reduces the required Fourier grid. With everything else 
 equal, the FFT length drops by about a factor of two per dimension at high accuracy (≈8× in 3D). The 
@@ -13,6 +27,8 @@ In contrast, native GROMACS typically sets the spreading/interpolation order to 
 single-core low-accuracy runs, which forces substantial Fourier-space upsampling. Consequently, at the same cutoff 
 radius, native GROMACS often needs a much larger FFT grid—even for ≈10⁻³ force accuracy—whereas ESP achieves similar 
 accuracy with far shorter transforms, yielding roughly a sixfold reduction in FFT length when other parameters are held fixed.
+We implemented ESP as modular components in both GROMACS and LAMMPS, introducing only minimal, localized changes to enable 
+rigorous and fair comparisons with the native codes.
 
 # Download Instructions
 
@@ -79,6 +95,10 @@ ESP computes the required k-space parameters internally to meet your `ewald_rtol
 In summary: set a sensible `rcoulomb`, choose `ewald_rtol` for your **force** accuracy needs (typically `1e-3`–`1e-4`), 
 pick `pme_order` = 4 or 5, and leave the rest to ESP’s internal autotuning.
 
+## Overall accuracy of MD simulations
+
+The overall accuracy of molecular dynamics (MD) simulations is influenced by several sources of error: modeling (force-field and parameterization), system preparation and input files, and numerical error from the time integrator and related algorithms. Even though our implementation ensures that forces are evaluated to the requested tolerance at each time step, the fidelity of the trajectory is ultimately constrained by these factors and by other components of the original GROMACS code base (e.g., integrators, constraints, thermostats).
+
 # Citing
 
 If GROMACS-ESP is useful in your work, please star this repository and cite both the software and the reference below.
@@ -116,8 +136,8 @@ The datasets and input files for testing the PME and ESP methods can be found in
 More detailed documentation will be available soon. If you have questions or feedback,
 please email **Libin Lu** at <llu@flatironinstitute.org>.
 
-> **Disclaimer:** This codebase is **not** an official release of GROMACS. It is independently 
-maintained and modified.
+**Disclaimer:** This codebase is **not** an official release of GROMACS. It is independently 
+maintained and modified. 
 
 
 

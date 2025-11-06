@@ -40,7 +40,7 @@ excluding the self-contribution:
 
 $$
 u_i := u(\mathbf{r}_i)=
-\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
+\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
 \frac{q_j}{4\pi\,\bigl\lvert \mathbf{r}_{i}-\mathbf{r}_j-\mathbf{n}L\bigr\rvert},
 \qquad i=1,\dots,N.
 $$
@@ -85,7 +85,7 @@ This allows the corresponding “local” part of the potential
 
 $$
 u_i^{\ell} =
-\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
+\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
 L\left(\left\lvert \mathbf{r}_{i}-\mathbf{r}_j-L\mathbf{n}\right\rvert\right)\, q_j
 $$
 

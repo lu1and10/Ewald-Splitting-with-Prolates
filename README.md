@@ -30,6 +30,68 @@ accuracy with far shorter transforms, yielding roughly a sixfold reduction in FF
 We implemented ESP as modular components in both GROMACS and LAMMPS, introducing only minimal, localized changes to enable 
 rigorous and fair comparisons with the native codes.
 
+## Problem formulation
+Consider a charged system of $N$ particles located at $`\mathbf{r}_{i}`$, $i=1,\cdots,N$, with
+charge strengths $q_{i}$, in the periodic domain $\Omega=[-L/2,L/2]^3$;
+we present the cubic case for simplicity.
+A core calculation in MD simulations is the evaluation of 
+the electrostatic potentials $`u(\mathbf{r}_i)`$ at these locations, 
+excluding the self-contribution:
+
+$$
+u_i := u(\mathbf{r}_i)=
+\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
+\frac{q_j}{4\pi\,\bigl\lvert \mathbf{r}_{i}-\mathbf{r}_j-\mathbf{n}L\bigr\rvert},
+\qquad i=1,\dots,N.
+$$
+
+The total electrostatic energy is $E=\frac{1}{2}\sum_{i=1}^{N}q_i\,u_i$, and the electrostatic force acting on the $`i`$ th particle is
+$`\mathbf{F}(\mathbf{r}_i)=-\nabla_{\mathbf{r}_i}E`$.
+Here we have nondimensionalized
+so that physical constants such as $\epsilon_0$ do not appear.
+For periodic systems, it is well known that 
+the system must satisfy the charge neutrality condition $`\sum_{j=1}^{N}q_j=0`$.
+The potential $u$ is only determined up to an arbitrary additive constant.
+
+## Algorithm at a glance
+- Real-space (short range): evaluate damped pairwise interactions using a cutoff.
+- Reciprocal-space (long range):
+  - Spread charges to a uniform grid with a separable PSWF window of width $`P`$.
+  - Apply a smaller 3D FFT (fewer grid points for the same accuracy).
+  - Multiply the fourier coefficients by the PSWF-based influence function.
+  - Inverse FFT to return to real space.
+  - Gather potentials/forces at particle locations using the same PSWF window.
+- Add self corrections as required by the chosen split.
+
+Rather than the traditional Ewald split, the ESP method
+considers a general radially symmetric split of the Coulomb kernel into
+spectral (smooth long-range) plus local (short-range) parts:
+
+$$
+\frac{1}{4\pi r}=S(r) + L(r)
+:= \frac{\displaystyle\int_0^{r/r_c}\chi_\alpha(x)\,dx}{4\pi r} + 
+\frac{1-\displaystyle\int_0^{r/r_c}\chi_\alpha(x)\,dx}{4\pi r},
+$$
+
+where $r_c$ defines a cutoff (truncation) radius,
+and $\alpha>0$ is a “shape parameter” depending on the desired precision $\varepsilon$.
+Here $\chi_\alpha$ is a smooth, nonnegative, even function with normalization
+$\int_0^1 \chi_\alpha(x)\,dx = 1 - \mathcal{O}(\varepsilon)$,
+and $\varepsilon$-support of $[-1,1]$, meaning $\chi_\alpha(1) \approx \varepsilon$
+and $\chi_\alpha(x)$ decays rapidly to zero as $x\rightarrow \infty$.
+The short-range component $L(r)$
+may be truncated at $r=r_c$ to precision $\varepsilon$.
+This allows the corresponding “local” part of the potential
+
+$$
+u_i^{\ell} =
+\sum_{\substack{j\in\{1,\dots,N\},\ \mathbf{n}\in\mathbb{Z}^3 \\ (j,\mathbf{n})\neq(i,\mathbf{0})}}
+L\left(\left\lvert \mathbf{r}_{i}-\mathbf{r}_j-L\mathbf{n}\right\rvert\right)\, q_j
+$$
+
+to be computed directly in $O(Ns)$ cost, where $s$ is the average number of particles
+within distance $r_c$ of a particle.
+
 # Download Instructions
 
 This repository is self-contained with no external submodules, so a standard `git clone` is sufficient.

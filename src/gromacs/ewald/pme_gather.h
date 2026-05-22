@@ -34,6 +34,7 @@
 #ifndef GMX_EWALD_PME_GATHER_H
 #define GMX_EWALD_PME_GATHER_H
 
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
 
@@ -43,9 +44,11 @@ struct splinedata_t;
 
 namespace gmx
 {
-template<typename T>
-class ArrayRef;
 }
+
+//! ESP force-gather derivative: lane-major SIMD Horner of esp.drho_coeff.
+//! Outputs `drho1d_out` sized 3 * P_padded, with padded lanes zero.
+void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> drho1d_out);
 
 /*! Gather the forces from the grid
  *

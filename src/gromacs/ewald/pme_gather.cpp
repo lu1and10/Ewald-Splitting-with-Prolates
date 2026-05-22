@@ -36,6 +36,9 @@
 
 #include "pme_gather.h"
 
+#include <array>
+#include <vector>
+
 #include "gromacs/simd/simd.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/gmxassert.h"
@@ -47,6 +50,42 @@
 #include "pme_spline_work.h"
 
 using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
+
+void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> drho1d_out)
+{
+    GMX_ASSERT(pme != nullptr, "ESP gather requires a valid PME object");
+    const EspParameters& esp        = pme->espRuntime;
+    const int            P          = esp.P;
+    const int            Pp         = esp.P_padded;
+    const int            dPolyOrder = esp.poly_order - 1;
+
+    GMX_ASSERT(P > 0, "ESP gather requires positive stencil order");
+    GMX_ASSERT(Pp >= P, "ESP gather requires P_padded >= P");
+    GMX_ASSERT(Pp % GMX_SIMD_REAL_WIDTH == 0, "ESP gather requires SIMD-aligned P_padded");
+    GMX_ASSERT(dPolyOrder > 0, "ESP gather requires at least a linear spreading polynomial");
+    GMX_ASSERT(esp.drho_coeff.size() >= static_cast<size_t>(dPolyOrder * Pp),
+               "ESP gather derivative coefficient table is too small");
+    GMX_ASSERT(drho1d_out.ssize() == DIM * Pp, "drho1d_out must be sized 3 * P_padded");
+
+    const std::array<real, DIM> x = { fx, fy, fz };
+    const real* const           coefs = esp.drho_coeff.data();
+
+    for (int dim = 0; dim < DIM; ++dim)
+    {
+        real* const outDim = drho1d_out.data() + dim * Pp;
+        const SimdReal xSimd(x[dim]);
+
+        for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
+        {
+            SimdReal drho = load<SimdReal>(&coefs[(dPolyOrder - 1) * Pp + k]);
+            for (int order = dPolyOrder - 2; order >= 0; --order)
+            {
+                drho = fma(drho, xSimd, load<SimdReal>(&coefs[order * Pp + k]));
+            }
+            storeU(outDim + k, drho);
+        }
+    }
+}
 
 /* Spline function. Goals: 1) Force compiler to instantiate function separately
    for each compile-time value of order and once more for any possible (runtime)
@@ -291,6 +330,69 @@ private:
     const int        idxZ   = idxptr[ZZ];
 };
 
+static RVec gather_f_pswf_atom(const gmx_pme_t&          pme,
+                               gmx::ArrayRef<const real> grid,
+                               const PmeAtomComm&        atc,
+                               const splinedata_t&       spline,
+                               int                       nn,
+                               gmx::ArrayRef<real>       drhoScratch)
+{
+    const int P  = pme.espRuntime.P;
+    const int Pp = pme.espRuntime.P_padded;
+    GMX_ASSERT(P == pme.pme_order, "ESP gather expects pme_order to match esp.P");
+
+    const int n      = spline.ind[nn];
+    const int norder = nn * P;
+
+    gather_f_pswfs(&pme,
+                   atc.fractx[n][XX],
+                   atc.fractx[n][YY],
+                   atc.fractx[n][ZZ],
+                   drhoScratch);
+
+    const int* const idxptr = atc.idx[n];
+    const int        idxX   = idxptr[XX];
+    const int        idxY   = idxptr[YY];
+    const int        idxZ   = idxptr[ZZ];
+    const int        gridNY = pme.pmegrid_ny;
+    const int        gridNZ = pme.pmegrid_nz;
+
+    const real* const thx  = spline.theta.coefficients[XX] + norder;
+    const real* const thy  = spline.theta.coefficients[YY] + norder;
+    const real* const thz  = spline.theta.coefficients[ZZ] + norder;
+    const real* const dthx = drhoScratch.data() + XX * Pp;
+    const real* const dthy = drhoScratch.data() + YY * Pp;
+    const real* const dthz = drhoScratch.data() + ZZ * Pp;
+
+    RVec f(0, 0, 0);
+    for (int ithx = 0; ithx < P; ithx++)
+    {
+        const int  indexX = (idxX + ithx) * gridNY * gridNZ;
+        const real tx     = thx[ithx];
+        const real dx     = dthx[ithx];
+
+        for (int ithy = 0; ithy < P; ithy++)
+        {
+            const int  indexXY = indexX + (idxY + ithy) * gridNZ;
+            const real ty      = thy[ithy];
+            const real dy      = dthy[ithy];
+            real       fxy = 0, fz = 0;
+
+            for (int ithz = 0; ithz < P; ithz++)
+            {
+                const real gridValue = grid[indexXY + idxZ + ithz];
+                fxy += thz[ithz] * gridValue;
+                fz += dthz[ithz] * gridValue;
+            }
+            f[XX] += dx * ty * fxy;
+            f[YY] += tx * dy * fxy;
+            f[ZZ] += tx * ty * fz;
+        }
+    }
+
+    return f;
+}
+
 
 void gather_f_bsplines(const gmx_pme_t&          pme,
                        gmx::ArrayRef<const real> grid,
@@ -317,6 +419,11 @@ void gather_f_bsplines(const gmx_pme_t&          pme,
 
     /* Extract the buffer for force output */
     rvec* gmx_restrict force = as_rvec_array(atc->f.data());
+    std::vector<real>  espDrhoScratch;
+    if (pme.useEsp)
+    {
+        espDrhoScratch.resize(DIM * pme.espRuntime.P_padded, real(0));
+    }
 
     /* Note that unrolling this loop by templating this function on order
      * deteriorates performance significantly with gcc5/6/7.
@@ -335,13 +442,20 @@ void gather_f_bsplines(const gmx_pme_t&          pme,
         if (coefficient != 0)
         {
             RVec       f;
-            const auto spline_func = do_fspline(pme, gridPtr, *atc, spline, nn);
-
-            switch (order)
+            if (pme.useEsp)
             {
-                case 4: f = spline_func(std::integral_constant<int, 4>()); break;
-                case 5: f = spline_func(std::integral_constant<int, 5>()); break;
-                default: f = spline_func(order); break;
+                f = gather_f_pswf_atom(pme, grid, *atc, spline, nn, makeArrayRef(espDrhoScratch));
+            }
+            else
+            {
+                const auto spline_func = do_fspline(pme, gridPtr, *atc, spline, nn);
+
+                switch (order)
+                {
+                    case 4: f = spline_func(std::integral_constant<int, 4>()); break;
+                    case 5: f = spline_func(std::integral_constant<int, 5>()); break;
+                    default: f = spline_func(order); break;
+                }
             }
 
             force[n][XX] += -coefficient * (f[XX] * nx * rxx);

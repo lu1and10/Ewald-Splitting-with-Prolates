@@ -103,3 +103,16 @@ target_link_libraries(esp_solve_test PRIVATE
         simd
         utility
 )
+
+gmx_add_gtest_executable(esp_gather_test
+    CPP_SOURCE_FILES
+        esp_gather_test.cpp
+)
+gmx_register_gtest_test(EspGatherTest esp_gather_test)
+target_link_libraries(esp_gather_test PRIVATE
+        ewald
+        math
+        mdtypes
+        simd
+        utility
+)

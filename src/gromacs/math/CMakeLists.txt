@@ -47,6 +47,7 @@ set(MATH_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/neldermead.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/nrjac.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/optimization.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/pswf.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/utilities.cpp
         )
 set(LIBGROMACS_SOURCES ${LIBGROMACS_SOURCES} ${MATH_SOURCES} PARENT_SCOPE)

@@ -45,6 +45,8 @@
 #include "gromacs/mdtypes/simulation_workload.h"
 #include "gromacs/utility/logger.h"
 
+#include "testutils/testasserts.h"
+
 namespace gmx::esp::test
 {
 namespace
@@ -102,6 +104,14 @@ TEST(EspAutotune, StencilOrderMatchesPaper3Table2)
     EXPECT_EQ(out.P, 6);
 }
 
+TEST(EspAutotune, StencilOrderMatchesLammpsIntermediateToleranceHeuristic)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(3e-5_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_EQ(out.P, 7);
+}
+
 TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
 {
     EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
@@ -157,6 +167,32 @@ TEST(EspAutotune, GridRespectsPmeInterpolationMinimum)
     EXPECT_GE(out.nx, minNx);
     EXPECT_GE(out.ny, minNx);
     EXPECT_GE(out.nz, minNx);
+}
+
+TEST(EspAutotune, FatalsOnStencilOrderOverrideAboveMax)
+{
+    EspAutotuneInput in      = makeCubicSpcEWaterInput(1e-4_real);
+    in.stencilOrderOverride  = 17;
+
+    GMX_EXPECT_DEATH_IF_SUPPORTED(autotuneEsp(in, nullLogger), "ESP stencil order");
+}
+
+TEST(EspAutotune, FatalsOnOversizedGrid)
+{
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-4_real);
+    in.box[XX][XX]      = 2000.0_real;
+    in.box[YY][YY]      = 2.46_real;
+    in.box[ZZ][ZZ]      = 2.46_real;
+
+    GMX_EXPECT_DEATH_IF_SUPPORTED(autotuneEsp(in, nullLogger), "ESP grid is too large");
+}
+
+TEST(EspAutotune, FatalsOnInvalidValidatedInput)
+{
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-4_real);
+    in.accuracy         = 0;
+
+    GMX_EXPECT_DEATH_IF_SUPPORTED(autotuneEsp(in, nullLogger), "ESP autotune accuracy");
 }
 
 TEST(EspAutotune, ScalarFieldsPopulated)

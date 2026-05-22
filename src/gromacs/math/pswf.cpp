@@ -671,8 +671,19 @@ int estimateOrder(double tolerance)
         throw std::invalid_argument("estimateOrder: tolerance must be in (0, 1)");
     }
 
-    const int p = static_cast<int>(std::round(-std::log10(tolerance)));
-    int       order = 2 * p - 2;
+    const double p      = -std::log10(tolerance);
+    const double rounded = std::round(p);
+    int          order   = 0;
+
+    if (std::abs(p - rounded) < 0.2)
+    {
+        order = 2 * static_cast<int>(rounded) - 2;
+    }
+    else
+    {
+        order = 2 * static_cast<int>(std::ceil(p)) - 3;
+    }
+
     order           = std::max(order, 4);
     order           = std::min(order, 16);
     return order;

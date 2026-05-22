@@ -91,7 +91,7 @@ double prolc180Der(double tolerance);
 //! Compactly-supported PSWF split function Phi_{r_c}^{c_s}(x) at scalar x >= 0.
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);
 
-//! epsilon to stencil order P, clamped to [4, 16].
+//! Epsilon to stencil order P using the LAMMPS ESP calibration heuristic, clamped to [4, 16].
 int estimateOrder(double tolerance);
 
 //! Real-space spreading window polynomial table, lane-major in the inner P axis.

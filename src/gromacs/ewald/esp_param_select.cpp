@@ -36,36 +36,112 @@
 
 #include "gromacs/ewald/esp_param_select.h"
 
+#include <algorithm>
 #include <cmath>
+#include <exception>
 
 #include "gromacs/fft/calcgrid.h"
 #include "gromacs/math/pswf.h"
 #include "gromacs/simd/simd.h"
+#include "gromacs/utility/fatalerror.h"
 #include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/logger.h"
 
 namespace gmx::esp
 {
+namespace
+{
+
+constexpr int c_minEspStencilOrder = 4;
+constexpr int c_maxEspStencilOrder = 16;
+constexpr int c_maxEspGridSize     = 4096;
+
+void checkAutotuneInput(const EspAutotuneInput& in)
+{
+    if (!std::isfinite(in.accuracy) || in.accuracy <= 0.0_real || in.accuracy >= 1.0_real)
+    {
+        gmx_fatal(FARGS,
+                  "ESP autotune accuracy must be finite and in (0, 1), got %g",
+                  static_cast<double>(in.accuracy));
+    }
+    if (!std::isfinite(in.spreadAccuracy) || in.spreadAccuracy <= 0.0_real
+        || in.spreadAccuracy >= 1.0_real)
+    {
+        gmx_fatal(FARGS,
+                  "ESP autotune spread accuracy must be finite and in (0, 1), got %g",
+                  static_cast<double>(in.spreadAccuracy));
+    }
+    if (!std::isfinite(in.cutoff) || in.cutoff <= 0.0_real)
+    {
+        gmx_fatal(FARGS,
+                  "ESP autotune cutoff must be finite and positive, got %g",
+                  static_cast<double>(in.cutoff));
+    }
+    if (!std::isfinite(in.q2sum) || in.q2sum <= 0.0)
+    {
+        gmx_fatal(FARGS, "ESP autotune q2sum must be finite and positive, got %g", in.q2sum);
+    }
+    if (in.stencilOrderOverride > 0
+        && (in.stencilOrderOverride < c_minEspStencilOrder
+            || in.stencilOrderOverride > c_maxEspStencilOrder))
+    {
+        gmx_fatal(FARGS,
+                  "ESP stencil order must be in [%d, %d] if explicitly set, got %d",
+                  c_minEspStencilOrder,
+                  c_maxEspStencilOrder,
+                  in.stencilOrderOverride);
+    }
+}
+
+double checkedProlc180(double tolerance, const char* name)
+{
+    try
+    {
+        return prolc180(tolerance);
+    }
+    catch (const std::exception& e)
+    {
+        gmx_fatal(FARGS, "ESP autotune failed while selecting %s: %s", name, e.what());
+    }
+}
+
+} // namespace
 
 EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdlog*/)
 {
-    GMX_ASSERT(in.accuracy > 0, "ESP autotune: accuracy validated upstream");
-    GMX_ASSERT(in.cutoff > 0, "ESP autotune: cutoff validated upstream");
-    GMX_ASSERT(in.q2sum > 0, "ESP autotune: q2sum validated upstream");
+    checkAutotuneInput(in);
     GMX_ASSERT(GMX_SIMD_REAL_WIDTH > 0, "SIMD width must be positive");
 
     EspParameters out;
 
-    out.c  = static_cast<real>(prolc180(static_cast<double>(in.accuracy)));
-    out.c1 = static_cast<real>(prolc180(0.5 * static_cast<double>(in.spreadAccuracy)));
+    out.c  = static_cast<real>(checkedProlc180(static_cast<double>(in.accuracy), "split c"));
+    out.c1 = static_cast<real>(
+            checkedProlc180(0.5 * static_cast<double>(in.spreadAccuracy), "spread c"));
     out.P  = (in.stencilOrderOverride > 0)
                      ? in.stencilOrderOverride
                      : estimateOrder(static_cast<double>(in.accuracy));
+    if (out.P < c_minEspStencilOrder || out.P > c_maxEspStencilOrder)
+    {
+        gmx_fatal(FARGS,
+                  "ESP stencil order must be in [%d, %d], got %d",
+                  c_minEspStencilOrder,
+                  c_maxEspStencilOrder,
+                  out.P);
+    }
     out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 
     const real h0          = static_cast<real>(M_PI) * in.cutoff / out.c;
     const int  minGridSize = 2 * (out.P - 1);
     calcFftGrid(nullptr, in.box, h0, minGridSize, &out.nx, &out.ny, &out.nz);
+    if (std::max({ out.nx, out.ny, out.nz }) > c_maxEspGridSize)
+    {
+        gmx_fatal(FARGS,
+                  "ESP grid is too large (%d x %d x %d); max supported grid dimension is %d",
+                  out.nx,
+                  out.ny,
+                  out.nz,
+                  c_maxEspGridSize);
+    }
 
     const Pswf0 pswfC(out.c);
     const Pswf0 pswfC1(out.c1);

@@ -230,6 +230,13 @@ TEST(EstimateOrder, MatchesPaper3Table2)
     EXPECT_EQ(estimateOrder(1e-7), 12);
 }
 
+TEST(EstimateOrder, MatchesLammpsIntermediateToleranceHeuristic)
+{
+    EXPECT_EQ(estimateOrder(2e-4), 5);
+    EXPECT_EQ(estimateOrder(7e-5), 6);
+    EXPECT_EQ(estimateOrder(3e-5), 7);
+}
+
 TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
 {
     constexpr int    p      = 6;

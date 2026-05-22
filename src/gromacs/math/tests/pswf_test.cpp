@@ -36,6 +36,7 @@
 
 #include "gromacs/math/pswf.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -49,6 +50,24 @@ namespace gmx::esp::test
 {
 namespace
 {
+
+double shortRangeEnergyReference(const Pswf0& psi, double rcInv, double r)
+{
+    if (r <= 0.0)
+    {
+        return -2.0 * rcInv / psi.lambda0();
+    }
+    const double phi = pswfSplitFunction(psi, rcInv, r);
+    return (1.0 - phi) / r;
+}
+
+double shortRangeForceReference(const Pswf0& psi, double rcInv, double r)
+{
+    const double h = 1e-5 * std::max(r, 1e-3);
+    return (shortRangeEnergyReference(psi, rcInv, r + h)
+            - shortRangeEnergyReference(psi, rcInv, r - h))
+           / (2.0 * h);
+}
 
 TEST(Pswf0, ConstructionRangeChecks)
 {
@@ -288,6 +307,44 @@ TEST(SplitFourierPoly, MatchesChiHatAt05)
         poly = poly * arg + coefs[l];
     }
     EXPECT_NEAR(poly, ref, 1e-5);
+}
+
+TEST(ShortRangeEnergyPoly, MatchesLscalarSampled)
+{
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    shortRangeEnergyPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0 psi(12.024);
+    for (double r : { 0.1, 0.3, 0.5, 0.7, 0.9 })
+    {
+        double poly = coefs[polyOrder - 1];
+        for (int l = polyOrder - 2; l >= 0; --l)
+        {
+            poly = poly * r + coefs[l];
+        }
+        EXPECT_NEAR(poly, shortRangeEnergyReference(psi, 1.0, r), 1e-4) << "r=" << r;
+    }
+}
+
+TEST(ShortRangeForcePoly, MatchesDerivativeOfL)
+{
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    shortRangeForcePoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0 psi(12.024);
+    for (double r : { 0.1, 0.3, 0.5, 0.7, 0.9 })
+    {
+        double poly = coefs[polyOrder - 1];
+        for (int l = polyOrder - 2; l >= 0; --l)
+        {
+            poly = poly * r + coefs[l];
+        }
+        EXPECT_NEAR(poly, shortRangeForceReference(psi, 1.0, r), 1e-3) << "r=" << r;
+    }
 }
 
 } // namespace

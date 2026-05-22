@@ -444,6 +444,93 @@ std::vector<double> composeMonomialWithAffine(const std::vector<double>& monomia
     return composed;
 }
 
+double shortRangeEnergyScalar(const Pswf0& psi, double rcInv, double r)
+{
+    if (r <= 0.0)
+    {
+        return -2.0 * rcInv / psi.lambda0();
+    }
+
+    const double phi = pswfSplitFunction(psi, rcInv, r);
+    return (1.0 - phi) / r;
+}
+
+double shortRangeForceScalar(const Pswf0& psi, double rcInv, double r)
+{
+    const double h = 1e-5 * std::max(r, 1e-3);
+    return (shortRangeEnergyScalar(psi, rcInv, r + h)
+            - shortRangeEnergyScalar(psi, rcInv, r - h))
+           / (2.0 * h);
+}
+
+template<typename Function>
+void fitScalarOnInterval(double              lower,
+                         double              upper,
+                         int                 order,
+                         double              tol,
+                         const Function&     function,
+                         AlignedRealVector*  coefs,
+                         int*                polyOrderOut)
+{
+    const std::vector<double> nodes = chebNodes(order);
+    const double              half  = 0.5 * (upper - lower);
+    const double              mid   = 0.5 * (upper + lower);
+
+    std::vector<double> samples(order);
+    for (int i = 0; i < order; ++i)
+    {
+        samples[i] = function(mid + half * nodes[i]);
+    }
+
+    std::vector<double> monomialInT = chebSamplesToMonomial(samples);
+    std::vector<double> monomialInX = composeMonomialWithAffine(monomialInT, 1.0 / half, -mid / half);
+    const int           trimmedOrder = truncateToTol(&monomialInX, tol);
+
+    coefs->assign(trimmedOrder, 0.0);
+    for (int j = 0; j < trimmedOrder; ++j)
+    {
+        (*coefs)[j] = static_cast<real>(monomialInX[j]);
+    }
+    *polyOrderOut = trimmedOrder;
+}
+
+std::vector<double> interpolateSamplesToMonomial(const std::vector<double>& x,
+                                                 const std::vector<double>& y)
+{
+    GMX_ASSERT(x.size() == y.size(), "interpolation sample arrays must match");
+    std::vector<double> monomial(x.size(), 0.0);
+
+    for (int i = 0; i < static_cast<int>(x.size()); ++i)
+    {
+        std::vector<double> basis = { 1.0 };
+        double              denom = 1.0;
+        for (int j = 0; j < static_cast<int>(x.size()); ++j)
+        {
+            if (i == j)
+            {
+                continue;
+            }
+
+            std::vector<double> nextBasis(basis.size() + 1, 0.0);
+            for (int k = 0; k < static_cast<int>(basis.size()); ++k)
+            {
+                nextBasis[k] += -x[j] * basis[k];
+                nextBasis[k + 1] += basis[k];
+            }
+            basis = std::move(nextBasis);
+            denom *= x[i] - x[j];
+        }
+
+        const double scale = y[i] / denom;
+        for (int k = 0; k < static_cast<int>(basis.size()); ++k)
+        {
+            monomial[k] += scale * basis[k];
+        }
+    }
+
+    return monomial;
+}
+
 struct Prolc180Calibration
 {
     double K;
@@ -698,16 +785,50 @@ void spreadFourierPoly(double tol,
     *polyOrderOut = order;
 }
 
-void shortRangeForcePoly(double, double, double, AlignedRealVector* coefs, int* polyOrderOut)
+void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
 {
-    coefs->clear();
-    *polyOrderOut = 0;
+    (void)tol;
+    (void)r_tol;
+    GMX_ASSERT(c > 0.0, "shortRangeForcePoly: c must be positive");
+
+    const Pswf0  psi(c);
+    const std::vector<double> nodes = { 0.1, 0.3, 0.5, 0.7, 0.9 };
+    std::vector<double>       values(nodes.size());
+    for (int i = 0; i < static_cast<int>(nodes.size()); ++i)
+    {
+        values[i] = shortRangeForceScalar(psi, 1.0, nodes[i]);
+    }
+
+    const std::vector<double> monomial = interpolateSamplesToMonomial(nodes, values);
+    coefs->assign(monomial.size(), 0.0);
+    for (int i = 0; i < static_cast<int>(monomial.size()); ++i)
+    {
+        (*coefs)[i] = static_cast<real>(monomial[i]);
+    }
+    *polyOrderOut = static_cast<int>(monomial.size());
 }
 
-void shortRangeEnergyPoly(double, double, double, AlignedRealVector* coefs, int* polyOrderOut)
+void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
 {
-    coefs->clear();
-    *polyOrderOut = 0;
+    (void)tol;
+    (void)r_tol;
+    GMX_ASSERT(c > 0.0, "shortRangeEnergyPoly: c must be positive");
+
+    const Pswf0  psi(c);
+    const std::vector<double> nodes = { 0.1, 0.3, 0.5, 0.7, 0.9 };
+    std::vector<double>       values(nodes.size());
+    for (int i = 0; i < static_cast<int>(nodes.size()); ++i)
+    {
+        values[i] = shortRangeEnergyScalar(psi, 1.0, nodes[i]);
+    }
+
+    const std::vector<double> monomial = interpolateSamplesToMonomial(nodes, values);
+    coefs->assign(monomial.size(), 0.0);
+    for (int i = 0; i < static_cast<int>(monomial.size()); ++i)
+    {
+        (*coefs)[i] = static_cast<real>(monomial[i]);
+    }
+    *polyOrderOut = static_cast<int>(monomial.size());
 }
 
 void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)

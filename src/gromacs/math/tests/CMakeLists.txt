@@ -55,8 +55,6 @@ gmx_add_gtest_executable(pswf_test
     CPP_SOURCE_FILES
         pswf_test.cpp
 )
-gmx_register_gtest_test(PswfTest pswf_test
-    OPENMP_THREADS 1
-)
+gmx_register_gtest_test(PswfTest pswf_test)
 target_link_libraries(pswf_test PRIVATE math)
 target_include_directories(pswf_test SYSTEM BEFORE PRIVATE ${CMAKE_SOURCE_DIR}/src/external/tinyxml2)

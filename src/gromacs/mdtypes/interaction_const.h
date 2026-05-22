@@ -79,6 +79,27 @@ struct switch_consts_t
 template<typename T>
 using AlignedVector = std::vector<T, gmx::AlignedAllocator<T>>;
 
+namespace gmx::esp
+{
+using AlignedRealVector = std::vector<real, gmx::AlignedAllocator<real>>;
+} // namespace gmx::esp
+
+struct EspShortRangeParameters
+{
+    //! ESP short-range cutoff r_c.
+    real cutoff = 0;
+    //! ESP self correction coefficient, -1/(r_c lambda_0).
+    real selfCoeff = 0;
+    //! Polynomial coefficients for the ESP short-range force.
+    gmx::esp::AlignedRealVector forcePolyCoeff;
+    //! Polynomial coefficients for the ESP short-range energy.
+    gmx::esp::AlignedRealVector energyPolyCoeff;
+    //! Order of the short-range force polynomial.
+    int forcePolyOrder = 0;
+    //! Order of the short-range energy polynomial.
+    int energyPolyOrder = 0;
+};
+
 /* Force/energy interpolation tables for Ewald long-range corrections
  *
  * Interpolation is linear for the force, quadratic for the potential.
@@ -213,6 +234,9 @@ struct interaction_const_t
 
     // Free-energy parameters, only present when free-energy calculations are requested
     std::unique_ptr<SoftCoreParameters> softCoreParameters;
+
+    //! ESP short-range parameters consumed by direct-space electrostatics kernels.
+    EspShortRangeParameters esp;
 
     /**
      * Indicates whether the NBNxM module handles short-range coulomb interactions.

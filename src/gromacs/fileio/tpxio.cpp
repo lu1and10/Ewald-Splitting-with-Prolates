@@ -202,6 +202,7 @@ enum tpxv
     tpxv_NNPotIFuncType,       /**< Add interaction function type for neural network potential */
     tpxv_AwhHistogramTolerance,       /**< Add AWH histogram tolerance */
     tpxv_OutputControlInKeyValueTree, /**< Move output control parameters to key-value tree */
+    tpxv_AddEspCoulomb,               /**< Persist ESP Coulomb settings and autotuned parameters */
     tpxv_Count                        /**< the total number of tpxv versions */
 };
 
@@ -1129,6 +1130,21 @@ static void doRealToKvt(gmx::ISerializer*               serializer,
     builder->addValue<real>(key, value);
 }
 
+static void serializeEspAlignedRealVector(gmx::ISerializer*           serializer,
+                                          gmx::esp::AlignedRealVector* v)
+{
+    int n = static_cast<int>(v->size());
+    serializer->doInt(&n);
+    if (serializer->reading())
+    {
+        v->resize(n);
+    }
+    if (n > 0)
+    {
+        serializer->doRealArray(v->data(), n);
+    }
+}
+
 static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_version)
 {
     int      i, j, k, idum = 0;
@@ -1932,6 +1948,45 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
             GMX_RELEASE_ASSERT(ir->internalParameters != nullptr,
                                "Parameters should be present when writing inputrec");
             gmx::serializeKeyValueTree(*ir->internalParameters, serializer);
+        }
+    }
+
+    if (file_version >= tpxv_AddEspCoulomb)
+    {
+        serializer->doReal(&ir->espSettings.accuracy);
+        serializer->doReal(&ir->espSettings.spreadAccuracy);
+        serializer->doInt(&ir->espSettings.stencilOrder);
+
+        if (ir->coulombtype == CoulombInteractionType::Esp)
+        {
+            serializer->doReal(&ir->espParams.c);
+            serializer->doReal(&ir->espParams.lambda0);
+            serializer->doReal(&ir->espParams.psi0AtZero);
+            serializer->doReal(&ir->espParams.selfCoeff);
+            serializer->doReal(&ir->espParams.cutoff);
+            serializer->doReal(&ir->espParams.c1);
+            serializer->doReal(&ir->espParams.lambda0_w);
+            serializer->doInt(&ir->espParams.P);
+            serializer->doInt(&ir->espParams.P_padded);
+            serializer->doInt(&ir->espParams.nx);
+            serializer->doInt(&ir->espParams.ny);
+            serializer->doInt(&ir->espParams.nz);
+
+            serializer->doInt(&ir->espParams.poly_order);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.rho_coeff);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.drho_coeff);
+
+            serializer->doInt(&ir->espParams.split_fourier_poly_order);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.split_fourier_poly);
+
+            serializer->doInt(&ir->espParams.spread_fourier_poly_order);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.spread_fourier_poly);
+
+            serializer->doInt(&ir->espParams.short_range_force_poly_order);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.short_range_force_poly);
+
+            serializer->doInt(&ir->espParams.short_range_energy_poly_order);
+            serializeEspAlignedRealVector(serializer, &ir->espParams.short_range_energy_poly);
         }
     }
 

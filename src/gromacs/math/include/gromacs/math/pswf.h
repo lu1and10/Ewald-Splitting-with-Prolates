@@ -35,6 +35,7 @@
 #ifndef GMX_MATH_PSWF_H
 #define GMX_MATH_PSWF_H
 
+#include <array>
 #include <vector>
 
 #include "gromacs/utility/alignedallocator.h"
@@ -78,6 +79,7 @@ private:
     double              lambda0_;
     double              normalizationAt0_;
     std::vector<double> legendreCoefficients_;
+    std::vector<std::array<double, 3>> recurrenceCoefficients_;
 };
 
 //! Tolerance to PSWF bandlimit c.

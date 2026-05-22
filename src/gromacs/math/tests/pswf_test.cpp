@@ -37,8 +37,12 @@
 #include "gromacs/math/pswf.h"
 
 #include <stdexcept>
+#include <string>
 
 #include <gtest/gtest.h>
+#include <tinyxml2.h>
+
+#include "testutils/testfilemanager.h"
 
 namespace gmx::esp::test
 {
@@ -52,6 +56,55 @@ TEST(Pswf0, ConstructionRangeChecks)
     EXPECT_THROW(Pswf0(30.01), std::invalid_argument);
     EXPECT_NO_THROW(Pswf0(5.0));
     EXPECT_NO_THROW(Pswf0(12.024));
+}
+
+TEST(Pswf0, EvalAtZeroEqualsOneAfterNormalization)
+{
+    Pswf0 psi(5.0);
+    EXPECT_NEAR(psi.eval(0.0), 1.0, 1e-12);
+}
+
+TEST(Pswf0, EvalSymmetric)
+{
+    Pswf0 psi(8.0);
+    EXPECT_NEAR(psi.eval(0.3), psi.eval(-0.3), 1e-12);
+    EXPECT_NEAR(psi.eval(0.7), psi.eval(-0.7), 1e-12);
+}
+
+TEST(Pswf0, EvalReturnsZeroOutsideSupport)
+{
+    Pswf0 psi(5.0);
+    EXPECT_DOUBLE_EQ(psi.eval(1.5), 0.0);
+    EXPECT_DOUBLE_EQ(psi.eval(-2.0), 0.0);
+}
+
+TEST(Pswf0, MatchesMpmathRefdataAt50Digits)
+{
+    tinyxml2::XMLDocument doc;
+    const auto refPath = gmx::test::TestFileManager::getInputFilePath("refdata/pswf_reference.xml");
+    ASSERT_EQ(doc.LoadFile(refPath.string().c_str()), tinyxml2::XML_SUCCESS);
+
+    const auto* root = doc.FirstChildElement("PswfRefdata");
+    ASSERT_NE(root, nullptr);
+
+    for (const auto* cNode = root->FirstChildElement("CValue"); cNode != nullptr;
+         cNode             = cNode->NextSiblingElement("CValue"))
+    {
+        double c = 0.0;
+        ASSERT_EQ(cNode->QueryDoubleAttribute("c", &c), tinyxml2::XML_SUCCESS);
+
+        Pswf0 psi(c);
+        for (const auto* sample = cNode->FirstChildElement("Sample"); sample != nullptr;
+             sample            = sample->NextSiblingElement("Sample"))
+        {
+            double x = 0.0;
+            ASSERT_EQ(sample->QueryDoubleAttribute("x", &x), tinyxml2::XML_SUCCESS);
+            ASSERT_NE(sample->GetText(), nullptr);
+
+            const double referenceValue = std::stod(sample->GetText());
+            EXPECT_NEAR(psi.eval(x), referenceValue, 1e-10) << "c=" << c << " x=" << x;
+        }
+    }
 }
 
 } // namespace

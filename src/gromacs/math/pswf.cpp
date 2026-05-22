@@ -506,14 +506,34 @@ double prolc180Der(double tolerance)
     return -(1.0 + 0.5 * inverseLog) / tolerance;
 }
 
-double pswfSplitFunction(const Pswf0& /*psi*/, double /*rcInv*/, double /*x*/)
+double pswfSplitFunction(const Pswf0& psi, double rcInv, double x)
 {
-    return 0.0;
+    if (x <= 0.0)
+    {
+        return 0.0;
+    }
+
+    const double normalizedX = x * rcInv;
+    if (normalizedX >= 1.0)
+    {
+        return 1.0;
+    }
+
+    return (2.0 / psi.lambda0()) * psi.evalIntegral(normalizedX);
 }
 
-int estimateOrder(double /*tolerance*/)
+int estimateOrder(double tolerance)
 {
-    return 4;
+    if (tolerance <= 0.0 || tolerance >= 1.0)
+    {
+        throw std::invalid_argument("estimateOrder: tolerance must be in (0, 1)");
+    }
+
+    const int p = static_cast<int>(std::round(-std::log10(tolerance)));
+    int       order = 2 * p - 2;
+    order           = std::max(order, 4);
+    order           = std::min(order, 16);
+    return order;
 }
 
 void spreadRealPoly(int /*P*/,

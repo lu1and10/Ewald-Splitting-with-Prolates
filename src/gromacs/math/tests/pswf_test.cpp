@@ -155,5 +155,40 @@ TEST(Prolc180, MatchesPaper3Table2)
     EXPECT_NEAR(prolc180(1e-5), 14.471, 0.6);
 }
 
+TEST(SplitFunction, AtZeroIsZero)
+{
+    Pswf0 psi(8.0);
+    EXPECT_NEAR(pswfSplitFunction(psi, 1.0, 0.0), 0.0, 1e-14);
+}
+
+TEST(SplitFunction, AtRcEqualsOne)
+{
+    Pswf0        psi(8.0);
+    const double rc = 1.0;
+    EXPECT_NEAR(pswfSplitFunction(psi, 1.0 / rc, rc), 1.0, 1e-9);
+}
+
+TEST(SplitFunction, MonotoneIncreasingOn_0_Rc)
+{
+    Pswf0        psi(8.0);
+    const double rc   = 1.0;
+    double       last = -1.0;
+    for (double r : { 0.1, 0.2, 0.5, 0.8, 0.95 })
+    {
+        const double value = pswfSplitFunction(psi, 1.0 / rc, r);
+        EXPECT_GT(value, last) << "r=" << r;
+        last = value;
+    }
+}
+
+TEST(EstimateOrder, MatchesPaper3Table2)
+{
+    EXPECT_EQ(estimateOrder(1e-3), 4);
+    EXPECT_EQ(estimateOrder(1e-4), 6);
+    EXPECT_EQ(estimateOrder(1e-5), 8);
+    EXPECT_EQ(estimateOrder(1e-6), 10);
+    EXPECT_EQ(estimateOrder(1e-7), 12);
+}
+
 } // namespace
 } // namespace gmx::esp::test

@@ -37,6 +37,7 @@ gmx_add_libgromacs_sources(
     calculate_spline_moduli.cpp
     ewald.cpp
     ewald_utils.cpp
+    esp_param_select.cpp
     long_range_correction.cpp
     pme.cpp
     pme_gather.cpp

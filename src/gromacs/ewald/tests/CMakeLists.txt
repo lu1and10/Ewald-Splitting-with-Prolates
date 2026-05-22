@@ -64,3 +64,15 @@ target_link_libraries(
         topology
         utility
 )
+
+gmx_add_gtest_executable(esp_param_select_test
+    CPP_SOURCE_FILES
+        esp_param_select_test.cpp
+)
+gmx_register_gtest_test(EspParamSelectTest esp_param_select_test)
+target_link_libraries(esp_param_select_test PRIVATE
+        ewald
+        math
+        mdtypes
+        utility
+)

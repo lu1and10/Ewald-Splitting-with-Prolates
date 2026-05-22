@@ -36,64 +36,64 @@
 
 #include "gromacs/ewald/esp_param_select.h"
 
-#include <algorithm>
-#include <array>
-#include <cmath>
+#include <gtest/gtest.h>
 
 #include "gromacs/math/pswf.h"
-#include "gromacs/simd/simd.h"
-#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/logger.h"
 
-namespace gmx::esp
+namespace gmx::esp::test
 {
 namespace
 {
 
-int ceilToFactorable(int n)
+constexpr real c_pi = 3.14159265358979323846_real;
+
+const gmx::MDLogger nullLogger;
+
+EspAutotuneInput makeCubicSpcEWaterInput(real eps)
 {
-    while (true)
-    {
-        int m = n;
-        for (const int primeFactor : { 2, 3, 5, 7 })
-        {
-            while (m % primeFactor == 0)
-            {
-                m /= primeFactor;
-            }
-        }
-        if (m == 1)
-        {
-            return n;
-        }
-        ++n;
-    }
+    EspAutotuneInput in{};
+    in.accuracy          = eps;
+    in.spreadAccuracy    = 0.25_real * eps;
+    in.cutoff            = 1.0_real;
+    in.box[XX][XX]       = 2.46_real;
+    in.box[YY][YY]       = 2.46_real;
+    in.box[ZZ][ZZ]       = 2.46_real;
+    in.natoms            = 1500;
+    in.q2sum             = 500.0 * (0.4238 * 0.4238 * 2 + 0.8476 * 0.8476);
+    in.stencilOrderOverride = -1;
+    return in;
+}
+
+TEST(EspAutotune, ClosedFormBandlimitMatchesProlc180)
+{
+    const real       eps = 1e-4_real;
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(eps);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_NEAR(out.c, prolc180(eps), 1.0_real);
+    EXPECT_NEAR(out.c1, prolc180(0.5_real * 0.25_real * eps), 1.0_real);
+}
+
+TEST(EspAutotune, StencilOrderMatchesPaper3Table2)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_EQ(out.P, 6);
+}
+
+TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    ASSERT_GT(out.c, 0);
+    ASSERT_GT(out.nx, 0);
+    const real expectedSpacing = c_pi * in.cutoff / out.c;
+    const real actualSpacingX  = in.box[XX][XX] / out.nx;
+    EXPECT_NEAR(actualSpacingX, expectedSpacing, 0.2_real * expectedSpacing);
 }
 
 } // namespace
-
-EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdlog*/)
-{
-    GMX_ASSERT(in.accuracy > 0, "ESP autotune: accuracy validated upstream");
-    GMX_ASSERT(in.cutoff > 0, "ESP autotune: cutoff validated upstream");
-    GMX_ASSERT(in.q2sum > 0, "ESP autotune: q2sum validated upstream");
-    GMX_ASSERT(GMX_SIMD_REAL_WIDTH > 0, "SIMD width must be positive");
-
-    EspParameters out;
-
-    out.c  = static_cast<real>(prolc180(static_cast<double>(in.accuracy)));
-    out.c1 = static_cast<real>(prolc180(0.5 * static_cast<double>(in.spreadAccuracy)));
-    out.P  = (in.stencilOrderOverride > 0)
-                     ? in.stencilOrderOverride
-                     : estimateOrder(static_cast<double>(in.accuracy));
-    out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
-
-    const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c;
-    out.nx        = ceilToFactorable(static_cast<int>(std::ceil(in.box[XX][XX] / h0)));
-    out.ny        = ceilToFactorable(static_cast<int>(std::ceil(in.box[YY][YY] / h0)));
-    out.nz        = ceilToFactorable(static_cast<int>(std::ceil(in.box[ZZ][ZZ] / h0)));
-
-    return out;
-}
-
-} // namespace gmx::esp
+} // namespace gmx::esp::test

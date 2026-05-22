@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/enumerationhelpers.h"
 #include "gromacs/utility/real.h"
@@ -62,6 +63,57 @@ struct EnumerationArray;
 class KeyValueTreeObject;
 struct MtsLevel;
 } // namespace gmx
+
+namespace gmx::esp
+{
+using AlignedRealVector = std::vector<real, gmx::AlignedAllocator<real>>;
+} // namespace gmx::esp
+
+struct EspUserSettings
+{
+    //! Target relative force accuracy epsilon (mdp esp-accuracy).
+    real accuracy = real(1e-4);
+    //! Spreading-window accuracy epsilon_1 (mdp esp-spread-accuracy). -1 = auto.
+    real spreadAccuracy = real(-1);
+    //! Stencil order override (mdp esp-stencil-order). -1 = autotune.
+    int stencilOrder = -1;
+};
+
+struct EspParameters
+{
+    //! PSWF splitting bandlimit.
+    real c = 0;
+    //! lambda_0^c.
+    real lambda0 = 0;
+    //! psi_0^c(0), normalized to 1.
+    real psi0AtZero = 0;
+    //! ESP self correction coefficient, -1/(r_c lambda_0).
+    real selfCoeff = 0;
+    //! Snapshot of ir->rcoulomb.
+    real cutoff = 0;
+    //! Spreading-window bandlimit.
+    real c1 = 0;
+    //! lambda_0 for the spreading window.
+    real lambda0_w = 0;
+    //! Stencil order per axis.
+    int P = 0;
+    //! Stencil order rounded up to SIMD width.
+    int P_padded = 0;
+    //! FFT grid dimensions.
+    int nx = 0, ny = 0, nz = 0;
+
+    gmx::esp::AlignedRealVector rho_coeff;
+    gmx::esp::AlignedRealVector drho_coeff;
+    int                         poly_order = 0;
+    gmx::esp::AlignedRealVector split_fourier_poly;
+    int                         split_fourier_poly_order = 0;
+    gmx::esp::AlignedRealVector spread_fourier_poly;
+    int                         spread_fourier_poly_order = 0;
+    gmx::esp::AlignedRealVector short_range_force_poly;
+    int                         short_range_force_poly_order = 0;
+    gmx::esp::AlignedRealVector short_range_energy_poly;
+    int                         short_range_energy_poly_order = 0;
+};
 
 struct t_grpopts
 {
@@ -536,6 +588,10 @@ struct t_inputrec // NOLINT (clang-analyzer-optin.performance.Padding)
     real epsilon_r = 0;
     //! Relative dielectric constant of the RF
     real epsilon_rf = 0;
+    //! ESP coulombtype: user-facing settings parsed from mdp.
+    EspUserSettings espSettings;
+    //! ESP coulombtype: autotune output populated at grompp time.
+    EspParameters espParams;
     //! Always false (no longer supported)
     bool implicit_solvent = false;
     //! Type of Van der Waals treatment

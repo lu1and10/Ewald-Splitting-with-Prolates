@@ -34,6 +34,7 @@
 
 #include "gmxpre.h"
 
+#include "gromacs/ewald/calculate_spline_moduli.h"
 #include "gromacs/ewald/esp_param_select.h"
 
 #include <gtest/gtest.h>
@@ -160,6 +161,37 @@ TEST(EspAutotune, AllPolynomialTablesPopulated)
     EXPECT_FALSE(out.short_range_force_poly.empty());
     EXPECT_GT(out.short_range_energy_poly_order, 0);
     EXPECT_FALSE(out.short_range_energy_poly.empty());
+}
+
+TEST(MakePswfModuli, BspModZeroIndexIsOne)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    esp = autotuneEsp(in, nullLogger);
+    std::array<std::vector<real>, DIM> bspMod;
+
+    make_pswf_moduli(&bspMod, esp, esp.nx, esp.ny, esp.nz);
+
+    EXPECT_EQ(bspMod[XX].size(), static_cast<size_t>(esp.nx));
+    EXPECT_EQ(bspMod[YY].size(), static_cast<size_t>(esp.ny));
+    EXPECT_EQ(bspMod[ZZ].size(), static_cast<size_t>(esp.nz));
+    EXPECT_NEAR(bspMod[XX][0], 1.0_real, 1e-10_real);
+    EXPECT_NEAR(bspMod[YY][0], 1.0_real, 1e-10_real);
+    EXPECT_NEAR(bspMod[ZZ][0], 1.0_real, 1e-10_real);
+}
+
+TEST(MakePswfModuli, SymmetricAroundNyquist)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    esp = autotuneEsp(in, nullLogger);
+    std::array<std::vector<real>, DIM> bspMod;
+
+    make_pswf_moduli(&bspMod, esp, esp.nx, esp.ny, esp.nz);
+
+    for (int m = 1; m < esp.nx / 2; ++m)
+    {
+        EXPECT_NEAR(bspMod[XX][m], bspMod[XX][esp.nx - m], 1e-10_real)
+                << "Symmetry failed at m=" << m;
+    }
 }
 
 } // namespace

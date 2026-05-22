@@ -206,3 +206,64 @@ std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz,
 
     return bsp_mod;
 }
+
+namespace
+{
+
+void make_pswf_modulus_1d(std::vector<real>*                 bspModAlpha,
+                          const gmx::esp::AlignedRealVector& spreadFourierPoly,
+                          int                                spreadPolyOrder,
+                          int                                P,
+                          real                               c1,
+                          int                                nAlpha)
+{
+    GMX_ASSERT(c1 > 0, "ESP moduli: bandlimit c1 must be positive");
+    GMX_ASSERT(P > 0, "ESP moduli: stencil order P must be positive");
+    GMX_ASSERT(nAlpha > 0, "ESP moduli: grid size must be positive");
+    GMX_ASSERT(spreadPolyOrder > 0, "ESP moduli: spread polynomial order must be positive");
+    GMX_ASSERT(spreadFourierPoly.size() >= static_cast<size_t>(spreadPolyOrder),
+               "ESP moduli: spread polynomial coefficient table is too small");
+
+    bspModAlpha->resize(nAlpha);
+    const real scale = real(P) * static_cast<real>(M_PI) / (real(nAlpha) * c1);
+    for (int m = 0; m < nAlpha; ++m)
+    {
+        const int  mSigned = (m <= nAlpha / 2) ? m : m - nAlpha;
+        const real s       = static_cast<real>(std::abs(mSigned)) * scale;
+
+        real phiSquared;
+        if (s > real(1))
+        {
+            phiSquared = real(0);
+        }
+        else
+        {
+            phiSquared = spreadFourierPoly[spreadPolyOrder - 1];
+            for (int j = spreadPolyOrder - 2; j >= 0; --j)
+            {
+                phiSquared = phiSquared * s + spreadFourierPoly[j];
+            }
+        }
+        (*bspModAlpha)[m] = phiSquared;
+    }
+
+    GMX_ASSERT(std::abs((*bspModAlpha)[0] - real(1)) < real(1e-10),
+               "spreadFourierPoly contract violation: g(0) != 1");
+    (*bspModAlpha)[0] = real(1);
+}
+
+} // namespace
+
+void make_pswf_moduli(std::array<std::vector<real>, DIM>* bspMod,
+                      const EspParameters&                 esp,
+                      int                                  nx,
+                      int                                  ny,
+                      int                                  nz)
+{
+    make_pswf_modulus_1d(
+            &(*bspMod)[XX], esp.spread_fourier_poly, esp.spread_fourier_poly_order, esp.P, esp.c1, nx);
+    make_pswf_modulus_1d(
+            &(*bspMod)[YY], esp.spread_fourier_poly, esp.spread_fourier_poly_order, esp.P, esp.c1, ny);
+    make_pswf_modulus_1d(
+            &(*bspMod)[ZZ], esp.spread_fourier_poly, esp.spread_fourier_poly_order, esp.P, esp.c1, nz);
+}

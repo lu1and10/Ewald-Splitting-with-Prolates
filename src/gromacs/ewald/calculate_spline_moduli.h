@@ -37,12 +37,21 @@
 #include <array>
 #include <vector>
 
+#include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/utility/real.h"
+#include "gromacs/utility/vectypes.h"
 
 /* Calulate plain SPME B-spline interpolation */
 std::array<std::vector<real>, 3> make_bspline_moduli(int nx, int ny, int nz, int order);
 
 /* Calculate the P3M B-spline moduli */
 std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz, int order);
+
+/* Calculate the ESP PSWF Fourier moduli. */
+void make_pswf_moduli(std::array<std::vector<real>, DIM>* bsp_mod,
+                      const EspParameters&                 esp,
+                      int                                  nx,
+                      int                                  ny,
+                      int                                  nz);
 
 #endif

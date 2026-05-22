@@ -99,6 +99,24 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
                       &out.spread_fourier_poly,
                       &out.spread_fourier_poly_order);
 
+    splitFourierPoly(static_cast<double>(in.accuracy),
+                     static_cast<double>(in.accuracy) * 0.1,
+                     static_cast<double>(out.c),
+                     &out.split_fourier_poly,
+                     &out.split_fourier_poly_order);
+
+    shortRangeForcePoly(static_cast<double>(in.accuracy),
+                        static_cast<double>(in.accuracy) * 0.1,
+                        static_cast<double>(out.c),
+                        &out.short_range_force_poly,
+                        &out.short_range_force_poly_order);
+
+    shortRangeEnergyPoly(static_cast<double>(in.accuracy) * 0.01,
+                         static_cast<double>(in.accuracy) * 0.001,
+                         static_cast<double>(out.c),
+                         &out.short_range_energy_poly,
+                         &out.short_range_energy_poly_order);
+
     return out;
 }
 

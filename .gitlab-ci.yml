@@ -75,3 +75,25 @@ include:
   - local: '/admin/gitlab-ci/documentation.gitlab-ci.yml'
   # Prepare release archives.
   - local: '/admin/gitlab-ci/archive.gitlab-ci.yml'
+
+esp_smoke:
+  stage: test
+  extends:
+    - .before_script:default
+  rules:
+    - !reference [.rules:merge-requests, rules]
+  image: ${CI_REGISTRY}/gromacs/gromacs/ci-ubuntu-22.04-llvm-14-cuda-12.1.0-openmpi-5.0.3
+  variables:
+    CMAKE: /usr/local/cmake-3.29.8/bin/cmake
+    GMX_FILLERS_IN_LOCAL_STATE: 1
+  needs:
+    - job: gromacs:clang-14:build
+  script:
+    - cd $BUILD_DIR
+    - ctest -R 'pswf|esp_|Esp' --output-on-failure
+    - ./bin/mdrun-esp-test --gtest_filter='*SpcEWater_ForceAndEnergyErrorVsHighAccuracyPme*' --gtest_brief=1
+  artifacts:
+    paths:
+      - $BUILD_DIR/Testing
+    when: always
+    expire_in: 1 week

@@ -74,6 +74,31 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     out.selfCoeff  = -1.0_real / (in.cutoff * out.lambda0);
     out.cutoff     = in.cutoff;
 
+    spreadRealPoly(out.P,
+                   out.P_padded,
+                   static_cast<double>(in.spreadAccuracy),
+                   static_cast<double>(in.spreadAccuracy) * 0.1,
+                   static_cast<double>(out.c1),
+                   &out.rho_coeff,
+                   &out.poly_order);
+
+    out.drho_coeff.assign(static_cast<size_t>(out.poly_order) * out.P_padded, 0.0_real);
+    for (int l = 0; l < out.poly_order - 1; ++l)
+    {
+        const real scale = static_cast<real>(l + 1);
+        for (int k = 0; k < out.P_padded; ++k)
+        {
+            out.drho_coeff[l * out.P_padded + k] =
+                    scale * out.rho_coeff[(l + 1) * out.P_padded + k];
+        }
+    }
+
+    spreadFourierPoly(static_cast<double>(in.spreadAccuracy),
+                      static_cast<double>(in.spreadAccuracy) * 0.1,
+                      static_cast<double>(out.c1),
+                      &out.spread_fourier_poly,
+                      &out.spread_fourier_poly_order);
+
     return out;
 }
 

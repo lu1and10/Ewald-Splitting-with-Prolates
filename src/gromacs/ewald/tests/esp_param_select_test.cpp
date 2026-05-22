@@ -136,5 +136,18 @@ TEST(EspAutotune, ScalarFieldsPopulated)
     EXPECT_EQ(out.cutoff, in.cutoff);
 }
 
+TEST(EspAutotune, PolynomialTablesPopulatedRealAndFourier)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_GT(out.poly_order, 0);
+    EXPECT_EQ(out.rho_coeff.size(), static_cast<size_t>(out.poly_order * out.P_padded));
+    EXPECT_EQ(out.drho_coeff.size(), out.rho_coeff.size());
+    EXPECT_GT(out.spread_fourier_poly_order, 0);
+    ASSERT_FALSE(out.spread_fourier_poly.empty());
+    EXPECT_NEAR(out.spread_fourier_poly[0], 1.0_real, 1e-6_real);
+}
+
 } // namespace
 } // namespace gmx::esp::test

@@ -124,5 +124,17 @@ TEST(EspAutotune, UsesGromacsFftGridChooser)
     EXPECT_EQ(out.nz, 14);
 }
 
+TEST(EspAutotune, ScalarFieldsPopulated)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_NE(out.lambda0, 0.0_real);
+    EXPECT_NEAR(out.psi0AtZero, 1.0_real, 1e-6_real);
+    EXPECT_NE(out.lambda0_w, 0.0_real);
+    EXPECT_LT(out.selfCoeff, 0.0_real);
+    EXPECT_EQ(out.cutoff, in.cutoff);
+}
+
 } // namespace
 } // namespace gmx::esp::test

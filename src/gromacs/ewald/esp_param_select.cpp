@@ -66,6 +66,14 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c;
     calcFftGrid(nullptr, in.box, h0, 2, &out.nx, &out.ny, &out.nz);
 
+    const Pswf0 pswfC(out.c);
+    const Pswf0 pswfC1(out.c1);
+    out.lambda0    = static_cast<real>(pswfC.lambda0());
+    out.psi0AtZero = static_cast<real>(pswfC.eval(0.0));
+    out.lambda0_w  = static_cast<real>(pswfC1.lambda0());
+    out.selfCoeff  = -1.0_real / (in.cutoff * out.lambda0);
+    out.cutoff     = in.cutoff;
+
     return out;
 }
 

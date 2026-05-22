@@ -50,3 +50,12 @@ gmx_add_unit_test(MathUnitTests math-test
         paddedvector.cpp
         )
 target_link_libraries(math-test PRIVATE math)
+
+gmx_add_gtest_executable(pswf_test
+    CPP_SOURCE_FILES
+        pswf_test.cpp
+)
+gmx_register_gtest_test(PswfTest pswf_test
+    OPENMP_THREADS 1
+)
+target_link_libraries(pswf_test PRIVATE math)

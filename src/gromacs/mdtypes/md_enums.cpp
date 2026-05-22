@@ -79,7 +79,8 @@ const char* enumValueToString(CoulombInteractionType enumValue)
         "PME-Switch",
         "PME-User-Switch",
         "Reaction-Field-zero",
-        "FMM"
+        "FMM",
+        "ESP"
     };
     return coloumbTreatmentNames[enumValue];
 }

@@ -270,6 +270,7 @@ enum class CoulombInteractionType : int
     PmeUserSwitch,
     RFZero,
     Fmm,
+    Esp,
     Count,
     Default = Cut
 };
@@ -294,12 +295,19 @@ static inline bool usingRF(const CoulombInteractionType& cit)
             || cit == CoulombInteractionType::RFNecUnsupported || cit == CoulombInteractionType::RFZero);
 };
 
+//! Returns whether we use ESP electrostatics
+static inline bool usingEsp(const CoulombInteractionType& cit)
+{
+    return cit == CoulombInteractionType::Esp;
+}
+
 //! Returns whether we use PME
 static inline bool usingPme(const CoulombInteractionType& cit)
 {
     return (cit == CoulombInteractionType::Pme || cit == CoulombInteractionType::PmeSwitch
             || cit == CoulombInteractionType::PmeUser
-            || cit == CoulombInteractionType::PmeUserSwitch || cit == CoulombInteractionType::P3mAD);
+            || cit == CoulombInteractionType::PmeUserSwitch || cit == CoulombInteractionType::P3mAD
+            || cit == CoulombInteractionType::Esp);
 }
 
 //! Returns whether we use PME or full Ewald

@@ -77,3 +77,16 @@ target_link_libraries(esp_param_select_test PRIVATE
         mdtypes
         utility
 )
+
+gmx_add_gtest_executable(esp_spread_test
+    CPP_SOURCE_FILES
+        esp_spread_test.cpp
+)
+gmx_register_gtest_test(EspSpreadTest esp_spread_test)
+target_link_libraries(esp_spread_test PRIVATE
+        ewald
+        math
+        mdtypes
+        simd
+        utility
+)

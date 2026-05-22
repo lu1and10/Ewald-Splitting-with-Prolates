@@ -40,6 +40,7 @@
 #include <cassert>
 
 #include <algorithm>
+#include <vector>
 
 #include "gromacs/ewald/pme.h"
 #include "gromacs/fft/parallel_3dfft.h"
@@ -299,6 +300,81 @@ static void make_bsplines(gmx::ArrayRef<real*> theta,
 }
 
 #pragma GCC diagnostic pop
+
+void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> rho1d_out)
+{
+    GMX_ASSERT(pme != nullptr, "ESP spread requires a valid PME object");
+    const EspParameters& esp       = pme->espRuntime;
+    const int            P         = esp.P;
+    const int            Pp        = esp.P_padded;
+    const int            polyOrder = esp.poly_order;
+
+    GMX_ASSERT(P > 0, "ESP spread requires positive stencil order");
+    GMX_ASSERT(Pp >= P, "ESP spread requires P_padded >= P");
+    GMX_ASSERT(Pp % GMX_SIMD_REAL_WIDTH == 0, "ESP spread requires SIMD-aligned P_padded");
+    GMX_ASSERT(polyOrder > 0, "ESP spread requires a positive polynomial order");
+    GMX_ASSERT(esp.rho_coeff.size() >= static_cast<size_t>(polyOrder * Pp),
+               "ESP spread coefficient table is too small");
+    GMX_ASSERT(rho1d_out.ssize() == DIM * Pp, "rho1d_out must be sized 3 * P_padded");
+
+    const std::array<real, DIM> x = { fx, fy, fz };
+    const real* const           coefs = esp.rho_coeff.data();
+
+    for (int dim = 0; dim < DIM; ++dim)
+    {
+        real* const outDim = rho1d_out.data() + dim * Pp;
+        const gmx::SimdReal xSimd(x[dim]);
+
+        for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
+        {
+            gmx::SimdReal rho =
+                    gmx::load<gmx::SimdReal>(&coefs[(polyOrder - 1) * Pp + k]);
+            for (int order = polyOrder - 2; order >= 0; --order)
+            {
+                rho = gmx::fma(rho, xSimd, gmx::load<gmx::SimdReal>(&coefs[order * Pp + k]));
+            }
+            gmx::storeU(outDim + k, rho);
+        }
+    }
+}
+
+static void make_pswf_splines(gmx::ArrayRef<real*> theta,
+                              gmx::ArrayRef<real*> dtheta,
+                              const gmx_pme_t*     pme,
+                              rvec                 fractx[],
+                              int                  nr,
+                              const int            ind[],
+                              const real           coefficient[],
+                              const bool           computeAllSplineCoefficients)
+{
+    const EspParameters& esp = pme->espRuntime;
+    const int            P   = esp.P;
+    const int            Pp  = esp.P_padded;
+
+    GMX_ASSERT(P == pme->pme_order, "ESP spread expects pme_order to match esp.P");
+    std::vector<real> rhoScratch(DIM * Pp, real(0));
+
+    for (int i = 0; i < nr; i++)
+    {
+        const int ii = ind[i];
+        if (computeAllSplineCoefficients || coefficient[ii] != 0.0)
+        {
+            make_pswfs(pme,
+                       fractx[ii][XX],
+                       fractx[ii][YY],
+                       fractx[ii][ZZ],
+                       gmx::arrayRefFromArray(rhoScratch.data(), rhoScratch.size()));
+
+            for (int dim = 0; dim < DIM; ++dim)
+            {
+                real* const thetaDim  = theta[dim] + i * P;
+                real* const dthetaDim = dtheta[dim] + i * P;
+                std::copy_n(rhoScratch.data() + dim * Pp, P, thetaDim);
+                std::fill_n(dthetaDim, P, real(0));
+            }
+        }
+    }
+}
 
 /* This has to be a macro to enable full compiler optimization with xlC (and probably others too) */
 #define DO_BSPLINE(order)                             \
@@ -971,14 +1047,28 @@ void spread_on_grid(const gmx_pme_t* pme,
 
             if (calculateSplines)
             {
-                make_bsplines(spline->theta.coefficients,
-                              spline->dtheta.coefficients,
-                              pme->pme_order,
-                              as_rvec_array(atc->fractx.data()),
-                              spline->n,
-                              spline->ind.data(),
-                              atc->coefficient.data(),
-                              computeAllSplineCoefficients);
+                if (pme->useEsp)
+                {
+                    make_pswf_splines(spline->theta.coefficients,
+                                      spline->dtheta.coefficients,
+                                      pme,
+                                      as_rvec_array(atc->fractx.data()),
+                                      spline->n,
+                                      spline->ind.data(),
+                                      atc->coefficient.data(),
+                                      computeAllSplineCoefficients);
+                }
+                else
+                {
+                    make_bsplines(spline->theta.coefficients,
+                                  spline->dtheta.coefficients,
+                                  pme->pme_order,
+                                  as_rvec_array(atc->fractx.data()),
+                                  spline->n,
+                                  spline->ind.data(),
+                                  atc->coefficient.data(),
+                                  computeAllSplineCoefficients);
+                }
             }
 
             if (doSpreading)

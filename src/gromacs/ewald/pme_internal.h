@@ -56,6 +56,7 @@
 #include <vector>
 
 #include "gromacs/math/gmxcomplex.h"
+#include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/defaultinitializationallocator.h"
@@ -396,6 +397,8 @@ struct gmx_pme_t
     bool bPPnode;   /* Node also does particle-particle forces */
     bool doCoulomb; /* Apply PME to electrostatics */
     bool doLJ;      /* Apply PME to Lennard-Jones r^-6 interactions */
+    bool useEsp = false; /* Use ESP PSWF kernels for Coulomb mesh work */
+    EspParameters espRuntime;
     bool bFEP;      /* Compute Free energy contribution */
     bool bFEP_q;
     bool bFEP_lj;

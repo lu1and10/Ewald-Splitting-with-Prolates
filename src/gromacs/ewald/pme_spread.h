@@ -34,11 +34,16 @@
 #ifndef GMX_EWALD_PME_SPREAD_H
 #define GMX_EWALD_PME_SPREAD_H
 
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/real.h"
 
 struct gmx_pme_t;
 struct PmeAndFftGrids;
 class PmeAtomComm;
+
+//! ESP charge spreading: lane-major SIMD Horner of esp.rho_coeff.
+//! Outputs `rho1d_out` sized 3 * P_padded, with padded lanes zero.
+void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> rho1d_out);
 
 /*! \brief Spread coefficients on the grid
  *

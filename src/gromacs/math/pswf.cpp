@@ -427,6 +427,23 @@ int truncateToTol(std::vector<double>* monomial, double tol)
     return order;
 }
 
+std::vector<double> composeMonomialWithAffine(const std::vector<double>& monomial,
+                                              double                     a,
+                                              double                     b)
+{
+    std::vector<double> composed(monomial.size(), 0.0);
+    for (int degree = 0; degree < static_cast<int>(monomial.size()); ++degree)
+    {
+        double choose = 1.0;
+        for (int k = 0; k <= degree; ++k)
+        {
+            composed[k] += monomial[degree] * choose * std::pow(b, degree - k) * std::pow(a, k);
+            choose *= static_cast<double>(degree - k) / (k + 1);
+        }
+    }
+    return composed;
+}
+
 struct Prolc180Calibration
 {
     double K;
@@ -693,10 +710,34 @@ void shortRangeEnergyPoly(double, double, double, AlignedRealVector* coefs, int*
     *polyOrderOut = 0;
 }
 
-void splitFourierPoly(double, double, double, AlignedRealVector* coefs, int* polyOrderOut)
+void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
 {
-    coefs->clear();
-    *polyOrderOut = 0;
+    (void)r_tol;
+    GMX_ASSERT(c > 0.0, "splitFourierPoly: c must be positive");
+
+    const Pswf0  psi(c);
+    const double c0    = 2.0 * psi.evalIntegral(1.0);
+    const double scale = psi.lambda0() / c0;
+
+    constexpr int             kOrder = 32;
+    const std::vector<double> nodes  = chebNodes(kOrder);
+    std::vector<double>       samples(kOrder);
+    for (int i = 0; i < kOrder; ++i)
+    {
+        const double arg = 0.5 * c * (nodes[i] + 1.0);
+        samples[i]       = scale * psi.eval(arg / c);
+    }
+
+    std::vector<double> monomialInT   = chebSamplesToMonomial(samples);
+    std::vector<double> monomialInArg = composeMonomialWithAffine(monomialInT, 2.0 / c, -1.0);
+    const int           order         = truncateToTol(&monomialInArg, tol);
+
+    coefs->assign(order, 0.0);
+    for (int j = 0; j < order; ++j)
+    {
+        (*coefs)[j] = static_cast<real>(monomialInArg[j]);
+    }
+    *polyOrderOut = order;
 }
 
 } // namespace gmx::esp

@@ -270,5 +270,25 @@ TEST(SpreadFourierPoly, MatchesNormalisedPsiSquaredAt03)
     EXPECT_NEAR(poly, ref, 1e-6);
 }
 
+TEST(SplitFourierPoly, MatchesChiHatAt05)
+{
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    splitFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0        psi(12.024);
+    const double arg = 0.5;
+    const double c0  = 2.0 * psi.evalIntegral(1.0);
+    const double ref = psi.eval(arg / 12.024) * (psi.lambda0() / c0);
+
+    double poly = coefs[polyOrder - 1];
+    for (int l = polyOrder - 2; l >= 0; --l)
+    {
+        poly = poly * arg + coefs[l];
+    }
+    EXPECT_NEAR(poly, ref, 1e-5);
+}
+
 } // namespace
 } // namespace gmx::esp::test

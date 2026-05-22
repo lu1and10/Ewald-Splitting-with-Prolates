@@ -386,3 +386,42 @@ erfc\ :math:`(x)` is the complementary error function. Note that |Gromacs|
 by default shifts this potential by a constant to ensure that the potential
 is zero at the cut-off.
 For further details on long-range electrostatics, see sec. :ref:`lrelstat`.
+
+Modified short-range interactions with ESP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Ewald Summation with Prolates (ESP) is another particle-mesh method for
+long-range electrostatics. Instead of using the Gaussian Ewald splitting,
+ESP splits the Coulomb kernel with a prolate spheroidal wave function
+(PSWF) window. The kernel is written as a smooth mesh part plus a compact
+short-range remainder,
+
+.. math:: {1 \over r} = {\Phi_{r_c}(r) \over r}
+          + {1-\Phi_{r_c}(r) \over r}.
+          :label: eqnespsplit
+
+The function :math:`\Phi_{r_c}` is constructed from the zeroth PSWF so
+that :math:`\Phi_{r_c}(r_c)=1`. Thus the short-range remainder is zero at
+and beyond the Coulomb cut-off :math:`r_c`, while the mesh part is smooth
+enough to be represented accurately on a Fourier grid. The reciprocal
+space calculation uses the existing PME FFT infrastructure, but spreads
+charges and gathers forces with PSWF interpolation windows rather than
+B-splines.
+
+The direct-space pair interaction used by the non-bonded kernels is the
+compact remainder in :eq:`eqn. %s <eqnespsplit>`. ESP also applies the
+self correction
+
+.. math:: V_\mathrm{self} =
+          - {f \over \varepsilon_r r_c \lambda_0}\sum_i q_i^2,
+          :label: eqnespself
+
+where :math:`\lambda_0` is the PSWF normalization eigenvalue for the
+chosen splitting bandlimit. The ESP parameters, interpolation tables, and
+Fourier grid are selected by :ref:`gmx grompp` from the requested
+:mdp:`esp-accuracy` and stored in the run input file.
+
+In the current implementation ESP is CPU-only and supports only
+orthorhombic three-dimensional periodic systems without pressure
+coupling, free-energy perturbation, walls, or unequal Coulomb and van der
+Waals cut-offs. Use PME for simulations that require those features.

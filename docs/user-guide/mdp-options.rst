@@ -657,6 +657,20 @@ Electrostatics
       interpolation parallelizes better than the FFT, so try
       decreasing grid dimensions while increasing interpolation.
 
+   .. mdp-value:: ESP
+
+      CPU Ewald Summation with Prolates electrostatics. ESP uses the
+      PME mesh infrastructure, but replaces the Gaussian Ewald
+      splitting and B-spline interpolation with prolate spheroidal wave
+      function splitting and spreading windows. The method is tuned by
+      :ref:`gmx grompp` from :mdp:`esp-accuracy`,
+      :mdp:`esp-spread-accuracy`, :mdp:`esp-stencil-order`, and
+      :mdp:`rcoulomb`; the resulting grid and tables are stored in the
+      run input file. ESP currently supports only CPU runs with
+      orthorhombic boxes, :mdp:`pbc` = xyz, :mdp:`ewald-geometry` = 3d,
+      no pressure coupling, no free-energy perturbation, no walls, and
+      :mdp:`rcoulomb` = :mdp:`rvdw`.
+
    .. mdp-value:: P3M-AD
 
       Particle-Particle Particle-Mesh algorithm with analytical
@@ -934,6 +948,28 @@ Ewald
    worth to switch to 5 and simultaneously increase the grid spacing.
    Note that on the CPU only values 4 and 5 have SIMD acceleration and
    GPUs only support the value 4.
+
+.. mdp:: esp-accuracy
+
+   (10\ :sup:`-4`)
+   Target relative force accuracy for
+   :mdp-value:`coulombtype=ESP`. :ref:`gmx grompp` uses this value to
+   choose the PSWF splitting bandlimit, stencil order, and Fourier grid.
+   Supported values are 10\ :sup:`-7` to 10\ :sup:`-2`.
+
+.. mdp:: esp-spread-accuracy
+
+   (-1)
+   Target spreading-window accuracy for
+   :mdp-value:`coulombtype=ESP`. The value -1 selects the automatic
+   default, one quarter of :mdp:`esp-accuracy`.
+
+.. mdp:: esp-stencil-order
+
+   (-1)
+   Stencil order override for :mdp-value:`coulombtype=ESP`. The value
+   -1 lets :ref:`gmx grompp` choose the order automatically. Explicit
+   values must be between 4 and 16.
 
 .. mdp:: ewald-rtol
 

@@ -72,6 +72,7 @@ gmx_add_gtest_executable(esp_param_select_test
 gmx_register_gtest_test(EspParamSelectTest esp_param_select_test)
 target_link_libraries(esp_param_select_test PRIVATE
         ewald
+        fft
         math
         mdtypes
         utility

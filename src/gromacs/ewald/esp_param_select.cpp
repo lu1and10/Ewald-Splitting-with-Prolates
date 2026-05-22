@@ -36,10 +36,9 @@
 
 #include "gromacs/ewald/esp_param_select.h"
 
-#include <algorithm>
-#include <array>
 #include <cmath>
 
+#include "gromacs/fft/calcgrid.h"
 #include "gromacs/math/pswf.h"
 #include "gromacs/simd/simd.h"
 #include "gromacs/utility/gmxassert.h"
@@ -47,30 +46,6 @@
 
 namespace gmx::esp
 {
-namespace
-{
-
-int ceilToFactorable(int n)
-{
-    while (true)
-    {
-        int m = n;
-        for (const int primeFactor : { 2, 3, 5, 7 })
-        {
-            while (m % primeFactor == 0)
-            {
-                m /= primeFactor;
-            }
-        }
-        if (m == 1)
-        {
-            return n;
-        }
-        ++n;
-    }
-}
-
-} // namespace
 
 EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdlog*/)
 {
@@ -89,9 +64,7 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 
     const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c;
-    out.nx        = ceilToFactorable(static_cast<int>(std::ceil(in.box[XX][XX] / h0)));
-    out.ny        = ceilToFactorable(static_cast<int>(std::ceil(in.box[YY][YY] / h0)));
-    out.nz        = ceilToFactorable(static_cast<int>(std::ceil(in.box[ZZ][ZZ] / h0)));
+    calcFftGrid(nullptr, in.box, h0, 2, &out.nx, &out.ny, &out.nz);
 
     return out;
 }

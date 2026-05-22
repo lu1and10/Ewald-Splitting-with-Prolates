@@ -95,5 +95,34 @@ TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
     EXPECT_NEAR(actualSpacingX, expectedSpacing, 0.2_real * expectedSpacing);
 }
 
+TEST(EspAutotune, TightToleranceUsesPracticalGridSelection)
+{
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-9_real);
+    in.box[XX][XX] = 1.0_real;
+    in.box[YY][YY] = 1.0_real;
+    in.box[ZZ][ZZ] = 1.0_real;
+
+    EspParameters out = autotuneEsp(in, nullLogger);
+    EXPECT_GT(out.nx, 1);
+    EXPECT_GT(out.ny, 1);
+    EXPECT_GT(out.nz, 1);
+    EXPECT_LE(out.P, 16);
+}
+
+TEST(EspAutotune, UsesGromacsFftGridChooser)
+{
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-4_real);
+    const real       h0 = c_pi * in.cutoff / static_cast<real>(prolc180(in.accuracy));
+    in.box[XX][XX]      = 13.0_real * h0;
+    in.box[YY][YY]      = 13.0_real * h0;
+    in.box[ZZ][ZZ]      = 13.0_real * h0;
+
+    EspParameters out = autotuneEsp(in, nullLogger);
+
+    EXPECT_EQ(out.nx, 14);
+    EXPECT_EQ(out.ny, 14);
+    EXPECT_EQ(out.nz, 14);
+}
+
 } // namespace
 } // namespace gmx::esp::test

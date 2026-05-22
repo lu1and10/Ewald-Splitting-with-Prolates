@@ -90,3 +90,16 @@ target_link_libraries(esp_spread_test PRIVATE
         simd
         utility
 )
+
+gmx_add_gtest_executable(esp_solve_test
+    CPP_SOURCE_FILES
+        esp_solve_test.cpp
+)
+gmx_register_gtest_test(EspSolveTest esp_solve_test)
+target_link_libraries(esp_solve_test PRIVATE
+        ewald
+        math
+        mdtypes
+        simd
+        utility
+)

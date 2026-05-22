@@ -284,6 +284,180 @@ using PME_T = SimdReal;
 using PME_T = real;
 #endif
 
+namespace
+{
+
+int solveBufferIndex(const int kx, const int iy, const int iz, const ivec localOffset, const ivec localNData)
+{
+    return (iz * localNData[YY] + iy) * localNData[XX] + (kx - localOffset[XX]);
+}
+
+int signedGridIndex(const int k, const int n)
+{
+    return (k < (n + 1) / 2) ? k : k - n;
+}
+
+real evaluatePolynomial(const ArrayRef<const real> coefficients, const int order, const real x)
+{
+    real value = coefficients[order - 1];
+    for (int j = order - 2; j >= 0; --j)
+    {
+        value = value * x + coefficients[j];
+    }
+    return value;
+}
+
+} // namespace
+
+void calc_exponentials_pswf(const int                 nx,
+                            const int                 ny,
+                            const int                 nz,
+                            const int                 maxkx,
+                            const ivec                localOffset,
+                            const ivec                localNData,
+                            const real                boxX,
+                            const real                boxY,
+                            const real                boxZ,
+                            const real                cutoff,
+                            const real                bandlimit,
+                            const ArrayRef<const real> splitFourierPoly,
+                            const int                 splitPolyOrder,
+                            const ArrayRef<const real> bspModX,
+                            const ArrayRef<const real> bspModY,
+                            const ArrayRef<const real> bspModZ,
+                            const ArrayRef<real>       solverBuffer,
+                            const ArrayRef<real>       scratchQSquared,
+                            const ArrayRef<real>       scratchBspX,
+                            const ArrayRef<real>       scratchChi,
+                            const ArrayRef<real>       scratchPk)
+{
+    GMX_ASSERT(nx > 0 && ny > 0 && nz > 0, "ESP solve requires positive grid sizes");
+    GMX_ASSERT(maxkx >= 0 && maxkx <= nx, "ESP solve maxkx out of range");
+    GMX_ASSERT(localNData[XX] > 0 && localNData[YY] > 0 && localNData[ZZ] > 0,
+               "ESP solve requires positive local grid sizes");
+    GMX_ASSERT(boxX > 0 && boxY > 0 && boxZ > 0, "ESP solve requires positive box lengths");
+    GMX_ASSERT(cutoff > 0 && bandlimit > 0, "ESP solve requires positive cutoff and bandlimit");
+    GMX_ASSERT(splitPolyOrder > 0, "ESP solve requires positive split polynomial order");
+    GMX_ASSERT(splitFourierPoly.size() >= static_cast<size_t>(splitPolyOrder),
+               "ESP solve split polynomial table is too small");
+    GMX_ASSERT(bspModX.ssize() == nx && bspModY.ssize() == ny && bspModZ.ssize() == nz,
+               "ESP solve modulus tables must be full-length grid tables");
+    GMX_ASSERT(solverBuffer.ssize() == localNData[XX] * localNData[YY] * localNData[ZZ],
+               "ESP solve output buffer size does not match local slab");
+    GMX_ASSERT(scratchQSquared.ssize() >= localNData[XX] && scratchBspX.ssize() >= localNData[XX]
+                       && scratchChi.ssize() >= localNData[XX] && scratchPk.ssize() >= localNData[XX],
+               "ESP solve scratch arrays must cover the local x slab");
+
+    const int  kxBegin = localOffset[XX];
+    const int  kxEnd   = localOffset[XX] + localNData[XX];
+    const int  kyBegin = localOffset[YY];
+    const int  kzBegin = localOffset[ZZ];
+    const real volume  = boxX * boxY * boxZ;
+    const real twoPi   = real(2.0 * M_PI);
+    const real invBoxX = real(1) / boxX;
+    const real invBoxY = real(1) / boxY;
+    const real invBoxZ = real(1) / boxZ;
+
+    for (int iz = 0; iz < localNData[ZZ]; ++iz)
+    {
+        const int  kz = kzBegin + iz;
+        const int  mz = signedGridIndex(kz, nz);
+        const real qz = twoPi * real(mz) * invBoxZ;
+
+        for (int iy = 0; iy < localNData[YY]; ++iy)
+        {
+            const int  ky = kyBegin + iy;
+            const int  my = signedGridIndex(ky, ny);
+            const real qy = twoPi * real(my) * invBoxY;
+
+            int kxStart;
+            if (localOffset[XX] > 0 || ky > 0 || kz > 0)
+            {
+                kxStart = kxBegin;
+            }
+            else
+            {
+                solverBuffer[solveBufferIndex(0, iy, iz, localOffset, localNData)] = real(0);
+                kxStart = kxBegin + 1;
+            }
+            if (kxStart >= kxEnd)
+            {
+                continue;
+            }
+
+            const real qyzSquared = qy * qy + qz * qz;
+            const int  positiveEnd = std::min(maxkx, kxEnd);
+
+            for (int kx = kxStart; kx < positiveEnd; ++kx)
+            {
+                const int  lx = kx - kxBegin;
+                const real qx = twoPi * real(kx) * invBoxX;
+                scratchQSquared[lx] = qx * qx + qyzSquared;
+                scratchBspX[lx]     = bspModX[kx];
+            }
+            for (int kx = std::max(kxStart, maxkx); kx < kxEnd; ++kx)
+            {
+                const int  lx = kx - kxBegin;
+                const int  mx = kx - nx;
+                const real qx = twoPi * real(mx) * invBoxX;
+                scratchQSquared[lx] = qx * qx + qyzSquared;
+                scratchBspX[lx]     = bspModX[kx];
+            }
+
+            const real bspYZ = bspModY[ky] * bspModZ[kz];
+
+            int lx = kxStart - kxBegin;
+#if defined PME_SIMD_SOLVE
+            const SimdReal cutoffSimd(cutoff);
+            const SimdReal bandlimitSimd(bandlimit);
+            const SimdReal twoPiSimd(twoPi);
+            const SimdReal volumeSimd(volume);
+            const SimdReal bspYZSimd(bspYZ);
+            const SimdReal zeroSimd(real(0));
+            for (; lx + GMX_SIMD_REAL_WIDTH <= localNData[XX]; lx += GMX_SIMD_REAL_WIDTH)
+            {
+                const SimdReal qSquared = loadU<SimdReal>(&scratchQSquared[lx]);
+                const SimdReal arg      = cutoffSimd * sqrt(qSquared);
+                SimdReal       chiHat(splitFourierPoly[splitPolyOrder - 1]);
+                for (int j = splitPolyOrder - 2; j >= 0; --j)
+                {
+                    chiHat = fma(chiHat, arg, SimdReal(splitFourierPoly[j]));
+                }
+
+                const SimdReal bspTotal = loadU<SimdReal>(&scratchBspX[lx]) * bspYZSimd;
+                const SimdReal denom    = volumeSimd * bspTotal * qSquared;
+                const auto     valid    = (arg <= bandlimitSimd) && (denom != zeroSimd);
+                const SimdReal pk       = selectByMask((twoPiSimd * chiHat) / denom, valid);
+
+                storeU(&scratchChi[lx], selectByMask(chiHat, arg <= bandlimitSimd));
+                storeU(&scratchPk[lx], pk);
+            }
+#endif
+            for (; lx < localNData[XX]; ++lx)
+            {
+                const real qSquared = scratchQSquared[lx];
+                const real arg      = cutoff * std::sqrt(qSquared);
+                real       chiHat   = evaluatePolynomial(splitFourierPoly, splitPolyOrder, arg);
+
+                if (arg > bandlimit)
+                {
+                    chiHat = real(0);
+                }
+
+                const real denom = volume * scratchBspX[lx] * bspYZ * qSquared;
+                scratchChi[lx]   = chiHat;
+                scratchPk[lx]    = (chiHat != real(0) && denom != real(0)) ? (twoPi * chiHat) / denom : real(0);
+            }
+
+            for (int kx = kxStart; kx < kxEnd; ++kx)
+            {
+                const int localX = kx - kxBegin;
+                solverBuffer[solveBufferIndex(kx, iy, iz, localOffset, localNData)] = scratchPk[localX];
+            }
+        }
+    }
+}
+
 int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
                               t_complex*       grid,
                               const real       vol,

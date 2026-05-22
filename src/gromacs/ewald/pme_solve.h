@@ -38,8 +38,10 @@
 
 #include "gromacs/math/gmxcomplex.h"
 #include "gromacs/math/paddedvector.h"
+#include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/real.h"
+#include "gromacs/utility/vectypes.h"
 
 struct gmx_pme_t;
 struct PmeAndFftGrids;
@@ -48,9 +50,29 @@ struct PmeOutput;
 
 namespace gmx
 {
-template<typename>
-class ArrayRef;
 }
+
+void calc_exponentials_pswf(int                 nx,
+                            int                 ny,
+                            int                 nz,
+                            int                 maxkx,
+                            const ivec          localOffset,
+                            const ivec          localNData,
+                            real                boxX,
+                            real                boxY,
+                            real                boxZ,
+                            real                cutoff,
+                            real                bandlimit,
+                            gmx::ArrayRef<const real> splitFourierPoly,
+                            int                       splitPolyOrder,
+                            gmx::ArrayRef<const real> bspModX,
+                            gmx::ArrayRef<const real> bspModY,
+                            gmx::ArrayRef<const real> bspModZ,
+                            gmx::ArrayRef<real>       solverBuffer,
+                            gmx::ArrayRef<real>       scratchQSquared,
+                            gmx::ArrayRef<real>       scratchBspX,
+                            gmx::ArrayRef<real>       scratchChi,
+                            gmx::ArrayRef<real>       scratchPk);
 
 //! Class for solving PME for Coulomb and LJ
 class PmeSolve

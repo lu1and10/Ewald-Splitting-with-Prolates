@@ -59,6 +59,7 @@
 #include "gromacs/applied_forces/awh/read_params.h"
 #include "gromacs/commandline/filenm.h"
 #include "gromacs/commandline/pargs.h"
+#include "gromacs/ewald/esp_param_select.h"
 #include "gromacs/ewald/ewald_utils.h"
 #include "gromacs/ewald/pme.h"
 #include "gromacs/fft/calcgrid.h"
@@ -2834,6 +2835,61 @@ int gmx_grompp(int argc, char* argv[])
                                 opt2fn("-ref", NFILE, fnm),
                                 opt2bSet("-ref", NFILE, fnm),
                                 &wi);
+    }
+
+    if (ir->coulombtype == CoulombInteractionType::Esp)
+    {
+        if (TRICLINIC(state.box))
+        {
+            gmx_fatal(FARGS,
+                      "ESP MVP supports only orthorhombic boxes; triclinic boxes are not "
+                      "supported by this CPU ESP implementation.");
+        }
+
+        double q2sum = 0;
+        for (const gmx_molblock_t& molblock : sys.molblock)
+        {
+            const gmx_moltype_t& molecule = sys.moltype[molblock.type];
+            double               q2mol    = 0;
+            for (int i = 0; i < molecule.atoms.nr; i++)
+            {
+                const real charge = molecule.atoms.atom[i].q;
+                q2mol += charge * charge;
+            }
+            q2sum += q2mol * molblock.nmol;
+        }
+
+        if (q2sum <= 0)
+        {
+            gmx_fatal(FARGS,
+                      "ESP electrostatics requires at least one non-zero charge in the "
+                      "processed topology.");
+        }
+
+        gmx::esp::EspAutotuneInput autotuneInput;
+        autotuneInput.accuracy             = ir->espSettings.accuracy;
+        autotuneInput.spreadAccuracy       = ir->espSettings.spreadAccuracy;
+        autotuneInput.cutoff               = ir->rcoulomb;
+        autotuneInput.natoms               = sys.natoms;
+        autotuneInput.q2sum                = q2sum;
+        autotuneInput.stencilOrderOverride = ir->espSettings.stencilOrder;
+        copy_mat(state.box, autotuneInput.box);
+
+        ir->espParams = gmx::esp::autotuneEsp(autotuneInput, logger);
+        ir->nkx       = ir->espParams.nx;
+        ir->nky       = ir->espParams.ny;
+        ir->nkz       = ir->espParams.nz;
+        ir->pme_order = ir->espParams.P;
+
+        GMX_LOG(logger.info)
+                .asParagraph()
+                .appendTextFormatted("ESP autotune selected c=%g, c1=%g, P=%d, grid=%dx%dx%d",
+                                     ir->espParams.c,
+                                     ir->espParams.c1,
+                                     ir->espParams.P,
+                                     ir->espParams.nx,
+                                     ir->espParams.ny,
+                                     ir->espParams.nz);
     }
 
     /*  reset_multinr(sys); */

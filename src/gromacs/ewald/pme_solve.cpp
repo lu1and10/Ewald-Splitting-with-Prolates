@@ -471,7 +471,7 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
     int        iyz0, iyz1, iyz, iy, iz, kxstart, kxend;
     real       mx, my, mz;
     real       ewaldcoeff = pme.ewaldcoeff_q;
-    real       factor     = M_PI * M_PI / (ewaldcoeff * ewaldcoeff);
+    real       factor;
     real       ets2, struct2, vfactor, ets2vf;
     real       d1, d2, energy = 0;
     real       by, bz;
@@ -513,11 +513,87 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
     real* gmx_restrict m2    = work.m2.data();
     real* gmx_restrict denom = work.denom.data();
     real* gmx_restrict tmp1  = work.tmp1.data();
+    real* gmx_restrict tmp2  = work.tmp2.data();
     real* gmx_restrict eterm = work.eterm.data();
     real* gmx_restrict m2inv = work.m2inv.data();
 
     iyz0 = local_ndata[YY] * local_ndata[ZZ] * thread / nthread;
     iyz1 = local_ndata[YY] * local_ndata[ZZ] * (thread + 1) / nthread;
+
+    if (pme.useEsp)
+    {
+        GMX_ASSERT(ryx == 0 && rzx == 0 && rzy == 0, "ESP PME solve currently supports orthorhombic boxes only");
+        clear_mat(work.vir_q);
+        work.energy_q = 0;
+
+        const real boxX = real(1) / rxx;
+        const real boxY = real(1) / ryy;
+        const real boxZ = real(1) / rzz;
+        maxkx          = (nx + 1) / 2;
+
+        for (iyz = iyz0; iyz < iyz1; iyz++)
+        {
+            iy = iyz / local_ndata[ZZ];
+            iz = iyz - iy * local_ndata[ZZ];
+
+            ky = iy + local_offset[YY];
+            kz = iz + local_offset[ZZ];
+
+            p0 = grid + iy * local_size[ZZ] * local_size[XX] + iz * local_size[XX];
+
+            ivec lineOffset = { local_offset[XX], ky, kz };
+            ivec lineNData  = { local_ndata[XX], 1, 1 };
+
+            calc_exponentials_pswf(nx,
+                                   ny,
+                                   nz,
+                                   maxkx,
+                                   lineOffset,
+                                   lineNData,
+                                   boxX,
+                                   boxY,
+                                   boxZ,
+                                   pme.espRuntime.cutoff,
+                                   pme.espRuntime.c,
+                                   makeConstArrayRef(pme.espRuntime.split_fourier_poly),
+                                   pme.espRuntime.split_fourier_poly_order,
+                                   makeConstArrayRef(pme.bsp_mod[XX]),
+                                   makeConstArrayRef(pme.bsp_mod[YY]),
+                                   makeConstArrayRef(pme.bsp_mod[ZZ]),
+                                   ArrayRef<real>(eterm, eterm + local_ndata[XX]),
+                                   ArrayRef<real>(m2, m2 + local_ndata[XX]),
+                                   ArrayRef<real>(denom, denom + local_ndata[XX]),
+                                   ArrayRef<real>(tmp1, tmp1 + local_ndata[XX]),
+                                   ArrayRef<real>(tmp2, tmp2 + local_ndata[XX]));
+
+            corner_fac = (kz == 0 || kz == (nz + 1) / 2) ? 0.5 : 1.0;
+            for (kx = local_offset[XX]; kx < local_offset[XX] + local_ndata[XX]; kx++, p0++)
+            {
+                const int  localX    = kx - local_offset[XX];
+                const real influence = elfac * eterm[localX];
+                d1                   = p0->re;
+                d2                   = p0->im;
+
+                p0->re = d1 * influence;
+                p0->im = d2 * influence;
+
+                if (computeEnergyAndVirial)
+                {
+                    struct2 = real(2) * (d1 * d1 + d2 * d2);
+                    energy += corner_fac * influence * struct2;
+                }
+            }
+        }
+
+        if (computeEnergyAndVirial)
+        {
+            work.energy_q = real(0.5) * energy;
+        }
+
+        return local_ndata[YY] * local_ndata[ZZ] * local_ndata[XX];
+    }
+
+    factor = M_PI * M_PI / (ewaldcoeff * ewaldcoeff);
 
     for (iyz = iyz0; iyz < iyz1; iyz++)
     {

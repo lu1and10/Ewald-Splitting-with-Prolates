@@ -819,6 +819,11 @@ static std::unique_ptr<gmx_pme_t> pmeInitWithStorage(const gmx_domdec_t*  dd,
      */
     pme->doCoulomb = usingPme(ir->coulombtype);
     pme->doLJ      = usingLJPme(ir->vdwtype);
+    pme->useEsp    = usingEsp(ir->coulombtype);
+    if (pme->useEsp)
+    {
+        pme->espRuntime = ir->espParams;
+    }
     pme->bFEP_q    = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_q);
     pme->bFEP_lj   = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_lj);
     pme->bFEP      = (pme->bFEP_q || pme->bFEP_lj);
@@ -987,7 +992,11 @@ static std::unique_ptr<gmx_pme_t> pmeInitWithStorage(const gmx_domdec_t*  dd,
 
     pme->spline_work = std::make_unique<pme_spline_work>(pme->pme_order);
 
-    if (!pme->bP3M)
+    if (pme->useEsp)
+    {
+        make_pswf_moduli(&pme->bsp_mod, pme->espRuntime, pme->nkx, pme->nky, pme->nkz);
+    }
+    else if (!pme->bP3M)
     {
         /* Use plain SPME B-spline interpolation */
         pme->bsp_mod = make_bspline_moduli(pme->nkx, pme->nky, pme->nkz, pme->pme_order);

@@ -817,6 +817,15 @@ void init_forcerec(FILE*                            fplog,
     /* Make data structure used by kernels */
     forcerec->ic = std::make_unique<interaction_const_t>(init_interaction_const(
             fplog, inputrec, mtop, systemHasNetCharge, anMDModuleProvidesDirectCoulomb));
+    if (usingEsp(inputrec.coulombtype))
+    {
+        forcerec->ic->esp.cutoff          = inputrec.espParams.cutoff;
+        forcerec->ic->esp.selfCoeff       = inputrec.espParams.selfCoeff;
+        forcerec->ic->esp.forcePolyCoeff  = inputrec.espParams.short_range_force_poly;
+        forcerec->ic->esp.energyPolyCoeff = inputrec.espParams.short_range_energy_poly;
+        forcerec->ic->esp.forcePolyOrder  = inputrec.espParams.short_range_force_poly_order;
+        forcerec->ic->esp.energyPolyOrder = inputrec.espParams.short_range_energy_poly_order;
+    }
     init_interaction_const_tables(fplog, forcerec->ic.get(), forcerec->rlist, inputrec.tabext);
 
     const interaction_const_t* interactionConst = forcerec->ic.get();
@@ -845,6 +854,7 @@ void init_forcerec(FILE*                            fplog,
         case CoulombInteractionType::Pme:
         case CoulombInteractionType::P3mAD:
         case CoulombInteractionType::Ewald:
+        case CoulombInteractionType::Esp:
             forcerec->nbkernel_elec_interaction = NbkernelElecType::Ewald;
             break;
 

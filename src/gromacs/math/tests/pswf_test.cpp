@@ -51,22 +51,42 @@ namespace gmx::esp::test
 namespace
 {
 
-double shortRangeEnergyReference(const Pswf0& psi, double rcInv, double r)
+double longRangeEnergyCorrectionReference(const Pswf0& psi, double r)
 {
-    if (r <= 0.0)
-    {
-        return -2.0 * rcInv / psi.lambda0();
-    }
-    const double phi = pswfSplitFunction(psi, rcInv, r);
-    return (1.0 - phi) / r;
+    return pswfSplitFunction(psi, 1.0, r);
 }
 
-double shortRangeForceReference(const Pswf0& psi, double rcInv, double r)
+double longRangeForceCorrectionReference(const Pswf0& psi, double r)
 {
-    const double h = 1e-5 * std::max(r, 1e-3);
-    return (shortRangeEnergyReference(psi, rcInv, r + h)
-            - shortRangeEnergyReference(psi, rcInv, r - h))
-           / (2.0 * h);
+    const double c0  = psi.evalIntegral(1.0);
+    const double phi = longRangeEnergyCorrectionReference(psi, r);
+    return r * psi.eval(r) / c0 - phi;
+}
+
+double fourierLambdaReference(const Pswf0& psi)
+{
+    constexpr int intervals = 2048;
+    const double  c         = psi.c();
+    const double  h         = 2.0 / intervals;
+    double        sum       = 0.0;
+    for (int i = 0; i <= intervals; ++i)
+    {
+        const double x      = -1.0 + i * h;
+        const double weight = (i == 0 || i == intervals) ? 1.0 : (i % 2 == 0 ? 2.0 : 4.0);
+        sum += weight * psi.eval(x) * std::cos(0.5 * c * x);
+    }
+    return (sum * h / 3.0) / psi.eval(0.5);
+}
+
+double spreadFourierReference(const Pswf0& psi, double s)
+{
+    return fourierLambdaReference(psi) * psi.eval(s);
+}
+
+double splitFourierReference(const Pswf0& psi, double arg)
+{
+    const double c0 = psi.evalIntegral(1.0);
+    return 0.5 * fourierLambdaReference(psi) * psi.eval(arg / psi.c()) / c0;
 }
 
 TEST(Pswf0, ConstructionRangeChecks)
@@ -210,7 +230,7 @@ TEST(EstimateOrder, MatchesPaper3Table2)
     EXPECT_EQ(estimateOrder(1e-7), 12);
 }
 
-TEST(SpreadRealPoly, AccuracyVsScalarPSWFEval)
+TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
 {
     constexpr int    p      = 6;
     constexpr int    pPadded = 8;
@@ -226,18 +246,19 @@ TEST(SpreadRealPoly, AccuracyVsScalarPSWFEval)
     Pswf0 psi(cWindow);
     for (int k = 0; k < p; ++k)
     {
-        for (double u : { -0.4, -0.1, 0.0, 0.3, 0.7 })
+        for (double x : { 0.05, 0.25, 0.5, 0.75, 0.95 })
         {
-            const double xi  = static_cast<double>(k) - 0.5 * (p - 1) + u;
-            const double s   = 2.0 * xi / static_cast<double>(p);
+            const int    tkmBasisIndex = p - k - 1;
+            const double s = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
+                             / (0.5 * static_cast<double>(p));
             const double ref = psi.eval(s);
 
             double poly = coefs[(polyOrder - 1) * pPadded + k];
             for (int l = polyOrder - 2; l >= 0; --l)
             {
-                poly = poly * u + coefs[l * pPadded + k];
+                poly = poly * x + coefs[l * pPadded + k];
             }
-            EXPECT_NEAR(poly, ref, 1e-4) << "k=" << k << " u=" << u;
+            EXPECT_NEAR(poly, ref, 1e-4) << "k=" << k << " x=" << x;
         }
     }
 }
@@ -261,16 +282,18 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
     }
 }
 
-TEST(SpreadFourierPoly, AtZeroEqualsOne)
+TEST(SpreadFourierPoly, AtZeroMatchesRawFourierWindow)
 {
     AlignedRealVector coefs;
     int               polyOrder = 0;
     spreadFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
-    EXPECT_NEAR(coefs[0], 1.0, 1e-10);
+
+    const Pswf0 psi(12.024);
+    EXPECT_NEAR(coefs[0], spreadFourierReference(psi, 0.0), 1e-5);
 }
 
-TEST(SpreadFourierPoly, MatchesNormalisedPsiSquaredAt03)
+TEST(SpreadFourierPoly, MatchesRawFourierWindowAt03)
 {
     AlignedRealVector coefs;
     int               polyOrder = 0;
@@ -279,7 +302,7 @@ TEST(SpreadFourierPoly, MatchesNormalisedPsiSquaredAt03)
 
     Pswf0        psi(12.024);
     const double s   = 0.3;
-    const double ref = std::pow(psi.eval(s) / psi.eval(0.0), 2.0);
+    const double ref = spreadFourierReference(psi, s);
 
     double poly = coefs[polyOrder - 1];
     for (int l = polyOrder - 2; l >= 0; --l)
@@ -298,8 +321,7 @@ TEST(SplitFourierPoly, MatchesChiHatAt05)
 
     Pswf0        psi(12.024);
     const double arg = 0.5;
-    const double c0  = 2.0 * psi.evalIntegral(1.0);
-    const double ref = psi.eval(arg / 12.024) * (psi.lambda0() / c0);
+    const double ref = splitFourierReference(psi, arg);
 
     double poly = coefs[polyOrder - 1];
     for (int l = polyOrder - 2; l >= 0; --l)
@@ -309,7 +331,7 @@ TEST(SplitFourierPoly, MatchesChiHatAt05)
     EXPECT_NEAR(poly, ref, 1e-5);
 }
 
-TEST(ShortRangeEnergyPoly, MatchesLscalarSampled)
+TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)
 {
     AlignedRealVector coefs;
     int               polyOrder = 0;
@@ -324,11 +346,11 @@ TEST(ShortRangeEnergyPoly, MatchesLscalarSampled)
         {
             poly = poly * r + coefs[l];
         }
-        EXPECT_NEAR(poly, shortRangeEnergyReference(psi, 1.0, r), 1e-4) << "r=" << r;
+        EXPECT_NEAR(poly, longRangeEnergyCorrectionReference(psi, r), 1e-4) << "r=" << r;
     }
 }
 
-TEST(ShortRangeForcePoly, MatchesDerivativeOfL)
+TEST(ShortRangeForcePoly, MatchesLongRangeForceCorrection)
 {
     AlignedRealVector coefs;
     int               polyOrder = 0;
@@ -343,7 +365,7 @@ TEST(ShortRangeForcePoly, MatchesDerivativeOfL)
         {
             poly = poly * r + coefs[l];
         }
-        EXPECT_NEAR(poly, shortRangeForceReference(psi, 1.0, r), 1e-3) << "r=" << r;
+        EXPECT_NEAR(poly, longRangeForceCorrectionReference(psi, r), 1e-3) << "r=" << r;
     }
 }
 

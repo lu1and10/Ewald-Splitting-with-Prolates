@@ -63,8 +63,9 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
                      : estimateOrder(static_cast<double>(in.accuracy));
     out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 
-    const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c;
-    calcFftGrid(nullptr, in.box, h0, 2, &out.nx, &out.ny, &out.nz);
+    const real h0          = static_cast<real>(M_PI) * in.cutoff / out.c;
+    const int  minGridSize = 2 * (out.P - 1);
+    calcFftGrid(nullptr, in.box, h0, minGridSize, &out.nx, &out.ny, &out.nz);
 
     const Pswf0 pswfC(out.c);
     const Pswf0 pswfC1(out.c1);

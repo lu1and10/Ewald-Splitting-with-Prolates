@@ -53,6 +53,7 @@ struct SolveFixture
     real boxZ = real(5.0);
     real cutoff = real(1.0);
     real bandlimit = real(100.0);
+    int  stencilOrder = 2;
     std::vector<real> splitFourierPoly = { real(1.0) };
     std::vector<real> bspX;
     std::vector<real> bspY;
@@ -103,6 +104,7 @@ struct SolveFixture
                                boxZ,
                                cutoff,
                                bandlimit,
+                               stencilOrder,
                                gmx::makeConstArrayRef(splitFourierPoly),
                                gmx::ssize(splitFourierPoly),
                                gmx::makeConstArrayRef(bspX),
@@ -219,6 +221,20 @@ TEST(EspSolve, OrthorhombicScalingMatchesAnalytical)
     const int ky = 2;
     const int kz = 1;
     EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], angularInfluenceReference(f, kx, ky, kz), real(1e-6));
+}
+
+TEST(EspSolve, StencilOrderAddsPmeGridScale)
+{
+    SolveFixture f;
+    f.stencilOrder = 6;
+    f.run();
+
+    const int  kx = 2;
+    const int  ky = 1;
+    const int  kz = 0;
+    const real gridScale = real(0.5 * f.stencilOrder);
+    const real expected = angularInfluenceReference(f, kx, ky, kz) / (gridScale * gridScale);
+    EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], expected, real(1e-6));
 }
 
 } // namespace

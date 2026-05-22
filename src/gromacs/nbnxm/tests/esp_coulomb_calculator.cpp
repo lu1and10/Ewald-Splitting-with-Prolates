@@ -82,7 +82,7 @@ TEST(EspShortRangeCoulombCalculator, SelfEnergyUsesEspSelfCoeff)
     EXPECT_NEAR(calculator.selfEnergy(), -ic.esp.selfCoeff, 1e-6_real);
 }
 
-TEST(EspShortRangeCoulombCalculator, ForceMatchesAnalyticLDerivative)
+TEST(EspShortRangeCoulombCalculator, ForceSubtractsLongRangeCorrection)
 {
     const interaction_const_t ic(makeEspInteractionConst());
     CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
@@ -104,8 +104,8 @@ TEST(EspShortRangeCoulombCalculator, ForceMatchesAnalyticLDerivative)
     {
         const real r        = rValues[lane % rValues.size()];
         const real s        = r / ic.esp.cutoff;
-        const real expected = -s * evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s)
-                              / ic.esp.cutoff;
+        const real expected = evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r
+                              + 1.0_real / r;
         EXPECT_NEAR(force[lane], expected, 2e-6_real) << "lane=" << lane;
     }
 }
@@ -132,9 +132,7 @@ TEST(EspShortRangeCoulombCalculator, ExcludedForceSubtractsRemovedOneOverR)
     {
         const real r        = rValues[lane % rValues.size()];
         const real s        = r / ic.esp.cutoff;
-        const real forceR   = -s * evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s)
-                            / ic.esp.cutoff;
-        const real expected = forceR - 1.0_real / r;
+        const real expected = evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r;
         EXPECT_NEAR(force[lane], expected, 2e-6_real) << "lane=" << lane;
     }
 }
@@ -163,9 +161,9 @@ TEST(EspShortRangeCoulombCalculator, EnergyCorrectionLeavesShortRangePotential)
     {
         const real r = rValues[lane % rValues.size()];
         const real s = r / ic.esp.cutoff;
-        const real shortRangePotential =
-                evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / ic.esp.cutoff;
-        const real expected = 1.0_real / r - shortRangePotential - ic.coulomb.ewaldShift;
+        const real expected =
+                evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / r
+                - ic.coulomb.ewaldShift;
         EXPECT_NEAR(correctionEnergy[lane], expected, 2e-6_real) << "lane=" << lane;
     }
 }

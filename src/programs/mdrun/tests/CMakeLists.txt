@@ -278,6 +278,19 @@ if (TEST MdrunMpi4RankPmeTests AND TEST MdrunMpi2RankPmeTests)
     set_tests_properties(MdrunMpi4RankPmeTests PROPERTIES DEPENDS MdrunMpi2RankPmeTests)
 endif()
 
+set(testname "MdrunEspTests")
+set(exename "mdrun-esp-test")
+
+gmx_add_gtest_executable(${exename}
+    CPP_SOURCE_FILES
+        # files with code for tests
+        esptest.cpp
+        # pseudo-library for code for mdrun
+        $<TARGET_OBJECTS:mdrun_objlib>
+        )
+target_link_libraries(${exename} PRIVATE mdrun_test_infrastructure)
+gmx_register_gtest_test(${testname} ${exename} OPENMP_THREADS 2 INTEGRATION_TEST IGNORE_LEAKS QUICK_GPU_TEST)
+
 # Slow-running tests that target testing multiple-rank coordination behaviors
 # These tests are extremely slow without optimization or OpenMP, so only run them for
 # build types like Release or RelWithDebInfo and if the build has been configured

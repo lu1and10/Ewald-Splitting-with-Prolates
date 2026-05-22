@@ -54,6 +54,21 @@ constexpr real c_pi = 3.14159265358979323846_real;
 
 const gmx::MDLogger nullLogger;
 
+double fourierLambdaReference(const Pswf0& psi)
+{
+    constexpr int intervals = 2048;
+    const double  c         = psi.c();
+    const double  h         = 2.0 / intervals;
+    double        sum       = 0.0;
+    for (int i = 0; i <= intervals; ++i)
+    {
+        const double x      = -1.0 + i * h;
+        const double weight = (i == 0 || i == intervals) ? 1.0 : (i % 2 == 0 ? 2.0 : 4.0);
+        sum += weight * psi.eval(x) * std::cos(0.5 * c * x);
+    }
+    return (sum * h / 3.0) / psi.eval(0.5);
+}
+
 EspAutotuneInput makeCubicSpcEWaterInput(real eps)
 {
     EspAutotuneInput in{};
@@ -128,6 +143,22 @@ TEST(EspAutotune, UsesGromacsFftGridChooser)
     EXPECT_EQ(out.nz, 14);
 }
 
+TEST(EspAutotune, GridRespectsPmeInterpolationMinimum)
+{
+    EspAutotuneInput in       = makeCubicSpcEWaterInput(1e-5_real);
+    in.cutoff                 = 0.8_real;
+    in.box[XX][XX]            = 1.86206_real;
+    in.box[YY][YY]            = 1.86206_real;
+    in.box[ZZ][ZZ]            = 1.86206_real;
+    in.stencilOrderOverride   = 12;
+    const EspParameters out   = autotuneEsp(in, nullLogger);
+    const int           minNx = 2 * (out.P - 1);
+
+    EXPECT_GE(out.nx, minNx);
+    EXPECT_GE(out.ny, minNx);
+    EXPECT_GE(out.nz, minNx);
+}
+
 TEST(EspAutotune, ScalarFieldsPopulated)
 {
     EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
@@ -150,7 +181,10 @@ TEST(EspAutotune, PolynomialTablesPopulatedRealAndFourier)
     EXPECT_EQ(out.drho_coeff.size(), out.rho_coeff.size());
     EXPECT_GT(out.spread_fourier_poly_order, 0);
     ASSERT_FALSE(out.spread_fourier_poly.empty());
-    EXPECT_NEAR(out.spread_fourier_poly[0], 1.0_real, 1e-6_real);
+
+    const Pswf0  psi(out.c1);
+    const double rawWindowAtZero = fourierLambdaReference(psi) * psi.eval(0.0);
+    EXPECT_NEAR(out.spread_fourier_poly[0], rawWindowAtZero, 1e-5_real);
 }
 
 TEST(EspAutotune, AllPolynomialTablesPopulated)
@@ -166,7 +200,7 @@ TEST(EspAutotune, AllPolynomialTablesPopulated)
     EXPECT_FALSE(out.short_range_energy_poly.empty());
 }
 
-TEST(MakePswfModuli, BspModZeroIndexIsOne)
+TEST(MakePswfModuli, BspModZeroIndexMatchesRawFourierWindowWithGridScale)
 {
     EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
     EspParameters    esp = autotuneEsp(in, nullLogger);
@@ -174,12 +208,17 @@ TEST(MakePswfModuli, BspModZeroIndexIsOne)
 
     make_pswf_moduli(&bspMod, esp, esp.nx, esp.ny, esp.nz);
 
+    const Pswf0  psi(esp.c1);
+    const double rawWindowAtZero = fourierLambdaReference(psi) * psi.eval(0.0);
+    const real   gridScale       = static_cast<real>(0.5 * esp.P);
+    const real   expectedZero    = gridScale * gridScale * static_cast<real>(rawWindowAtZero * rawWindowAtZero);
+
     EXPECT_EQ(bspMod[XX].size(), static_cast<size_t>(esp.nx));
     EXPECT_EQ(bspMod[YY].size(), static_cast<size_t>(esp.ny));
     EXPECT_EQ(bspMod[ZZ].size(), static_cast<size_t>(esp.nz));
-    EXPECT_NEAR(bspMod[XX][0], 1.0_real, 1e-10_real);
-    EXPECT_NEAR(bspMod[YY][0], 1.0_real, 1e-10_real);
-    EXPECT_NEAR(bspMod[ZZ][0], 1.0_real, 1e-10_real);
+    EXPECT_NEAR(bspMod[XX][0], expectedZero, 1e-5_real);
+    EXPECT_NEAR(bspMod[YY][0], expectedZero, 1e-5_real);
+    EXPECT_NEAR(bspMod[ZZ][0], expectedZero, 1e-5_real);
 }
 
 TEST(MakePswfModuli, SymmetricAroundNyquist)

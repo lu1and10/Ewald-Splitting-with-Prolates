@@ -231,25 +231,22 @@ void make_pswf_modulus_1d(std::vector<real>*                 bspModAlpha,
         const int  mSigned = (m <= nAlpha / 2) ? m : m - nAlpha;
         const real s       = static_cast<real>(std::abs(mSigned)) * scale;
 
-        real phiSquared;
+        real phi;
         if (s > real(1))
         {
-            phiSquared = real(0);
+            phi = real(0);
         }
         else
         {
-            phiSquared = spreadFourierPoly[spreadPolyOrder - 1];
+            phi = spreadFourierPoly[spreadPolyOrder - 1];
             for (int j = spreadPolyOrder - 2; j >= 0; --j)
             {
-                phiSquared = phiSquared * s + spreadFourierPoly[j];
+                phi = phi * s + spreadFourierPoly[j];
             }
         }
-        (*bspModAlpha)[m] = phiSquared;
+        const real gridScale = real(0.5) * real(P);
+        (*bspModAlpha)[m]    = gridScale * gridScale * phi * phi;
     }
-
-    GMX_ASSERT(std::abs((*bspModAlpha)[0] - real(1)) < real(1e-10),
-               "spreadFourierPoly contract violation: g(0) != 1");
-    (*bspModAlpha)[0] = real(1);
 }
 
 } // namespace

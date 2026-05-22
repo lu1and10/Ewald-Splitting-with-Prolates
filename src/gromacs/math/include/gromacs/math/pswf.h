@@ -103,7 +103,7 @@ void spreadRealPoly(int                P,
                     AlignedRealVector* coefs,
                     int*               polyOrderOut);
 
-//! Fourier-space normalized |phihat_1D|^2(s)/|phihat_1D|^2(0) on s in [0, 1].
+//! Fourier-space raw 1D spreading window phihat_1D(s) on s in [0, 1].
 void spreadFourierPoly(double             tol,
                        double             r_tol,
                        double             c_w,

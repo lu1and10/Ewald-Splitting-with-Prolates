@@ -320,6 +320,7 @@ void calc_exponentials_pswf(const int                 nx,
                             const real                boxZ,
                             const real                cutoff,
                             const real                bandlimit,
+                            const int                 stencilOrder,
                             const ArrayRef<const real> splitFourierPoly,
                             const int                 splitPolyOrder,
                             const ArrayRef<const real> bspModX,
@@ -337,6 +338,7 @@ void calc_exponentials_pswf(const int                 nx,
                "ESP solve requires positive local grid sizes");
     GMX_ASSERT(boxX > 0 && boxY > 0 && boxZ > 0, "ESP solve requires positive box lengths");
     GMX_ASSERT(cutoff > 0 && bandlimit > 0, "ESP solve requires positive cutoff and bandlimit");
+    GMX_ASSERT(stencilOrder > 0, "ESP solve requires positive stencil order");
     GMX_ASSERT(splitPolyOrder > 0, "ESP solve requires positive split polynomial order");
     GMX_ASSERT(splitFourierPoly.size() >= static_cast<size_t>(splitPolyOrder),
                "ESP solve split polynomial table is too small");
@@ -357,6 +359,8 @@ void calc_exponentials_pswf(const int                 nx,
     const real invBoxX = real(1) / boxX;
     const real invBoxY = real(1) / boxY;
     const real invBoxZ = real(1) / boxZ;
+    const real solveGridScale = real(0.5) * real(stencilOrder);
+    const real solveGridScaleSquared = solveGridScale * solveGridScale;
 
     for (int iz = 0; iz < localNData[ZZ]; ++iz)
     {
@@ -413,6 +417,7 @@ void calc_exponentials_pswf(const int                 nx,
             const SimdReal twoPiSimd(twoPi);
             const SimdReal volumeSimd(volume);
             const SimdReal bspYZSimd(bspYZ);
+            const SimdReal solveGridScaleSquaredSimd(solveGridScaleSquared);
             const SimdReal zeroSimd(real(0));
             for (; lx + GMX_SIMD_REAL_WIDTH <= localNData[XX]; lx += GMX_SIMD_REAL_WIDTH)
             {
@@ -425,7 +430,7 @@ void calc_exponentials_pswf(const int                 nx,
                 }
 
                 const SimdReal bspTotal = loadU<SimdReal>(&scratchBspX[lx]) * bspYZSimd;
-                const SimdReal denom    = volumeSimd * bspTotal * qSquared;
+                const SimdReal denom    = volumeSimd * bspTotal * qSquared * solveGridScaleSquaredSimd;
                 const auto     valid    = (arg <= bandlimitSimd) && (denom != zeroSimd);
                 const SimdReal pk       = selectByMask((twoPiSimd * chiHat) / denom, valid);
 
@@ -444,7 +449,7 @@ void calc_exponentials_pswf(const int                 nx,
                     chiHat = real(0);
                 }
 
-                const real denom = volume * scratchBspX[lx] * bspYZ * qSquared;
+                const real denom = volume * scratchBspX[lx] * bspYZ * qSquared * solveGridScaleSquared;
                 scratchChi[lx]   = chiHat;
                 scratchPk[lx]    = (chiHat != real(0) && denom != real(0)) ? (twoPi * chiHat) / denom : real(0);
             }
@@ -555,6 +560,7 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
                                    boxZ,
                                    pme.espRuntime.cutoff,
                                    pme.espRuntime.c,
+                                   pme.espRuntime.P,
                                    makeConstArrayRef(pme.espRuntime.split_fourier_poly),
                                    pme.espRuntime.split_fourier_poly_order,
                                    makeConstArrayRef(pme.bsp_mod[XX]),

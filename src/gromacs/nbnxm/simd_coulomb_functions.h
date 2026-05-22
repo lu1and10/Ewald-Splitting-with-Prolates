@@ -171,9 +171,9 @@ public:
                     {
                         const SimdReal r = rSquaredV[i] * dummyRInvV[i];
                         const SimdReal s = r * espInvCutoff_;
-                        const SimdReal dL = evaluateEspPolynomial(espForcePolyCoeff_, espForcePolyOrder_, s);
-                        const SimdReal shortRangeForceR = -s * espInvCutoff_ * dL;
-                        return selectByMask(shortRangeForceR + rInvExclV[i] - dummyRInvV[i],
+                        const SimdReal correction =
+                                evaluateEspPolynomial(espForcePolyCoeff_, espForcePolyOrder_, s);
+                        return selectByMask(fma(correction, dummyRInvV[i], rInvExclV[i]),
                                             withinCutoffV[i]);
                     });
         }
@@ -203,10 +203,10 @@ public:
                     {
                         const SimdReal r = rSquaredV[i] * rInvV[i];
                         const SimdReal s = r * espInvCutoff_;
-                        const SimdReal shortRangePotential =
+                        const SimdReal longRangeCorrection =
                                 evaluateEspPolynomial(espEnergyPolyCoeff_, espEnergyPolyOrder_, s)
-                                * espInvCutoff_;
-                        return selectByMask(rInvV[i] - shortRangePotential - espEwaldShift_,
+                                * rInvV[i];
+                        return selectByMask(longRangeCorrection - espEwaldShift_,
                                             withinCutoffV[i]);
                     });
             return;

@@ -190,5 +190,56 @@ TEST(EstimateOrder, MatchesPaper3Table2)
     EXPECT_EQ(estimateOrder(1e-7), 12);
 }
 
+TEST(SpreadRealPoly, AccuracyVsScalarPSWFEval)
+{
+    constexpr int    p      = 6;
+    constexpr int    pPadded = 8;
+    constexpr double cWindow = 12.024;
+
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    spreadRealPoly(p, pPadded, 1e-5, 1e-6, cWindow, &coefs, &polyOrder);
+
+    ASSERT_GT(polyOrder, 0);
+    ASSERT_EQ(coefs.size(), static_cast<std::size_t>(polyOrder * pPadded));
+
+    Pswf0 psi(cWindow);
+    for (int k = 0; k < p; ++k)
+    {
+        for (double u : { -0.4, -0.1, 0.0, 0.3, 0.7 })
+        {
+            const double xi  = static_cast<double>(k) - 0.5 * (p - 1) + u;
+            const double s   = 2.0 * xi / static_cast<double>(p);
+            const double ref = psi.eval(s);
+
+            double poly = coefs[(polyOrder - 1) * pPadded + k];
+            for (int l = polyOrder - 2; l >= 0; --l)
+            {
+                poly = poly * u + coefs[l * pPadded + k];
+            }
+            EXPECT_NEAR(poly, ref, 1e-4) << "k=" << k << " u=" << u;
+        }
+    }
+}
+
+TEST(SpreadRealPoly, PaddedTailIsZero)
+{
+    constexpr int p       = 5;
+    constexpr int pPadded = 8;
+
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    spreadRealPoly(p, pPadded, 1e-4, 1e-5, 9.5392, &coefs, &polyOrder);
+
+    for (int l = 0; l < polyOrder; ++l)
+    {
+        for (int k = p; k < pPadded; ++k)
+        {
+            EXPECT_EQ(coefs[l * pPadded + k], 0.0)
+                    << "l=" << l << " k=" << k;
+        }
+    }
+}
+
 } // namespace
 } // namespace gmx::esp::test

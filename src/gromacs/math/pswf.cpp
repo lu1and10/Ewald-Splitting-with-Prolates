@@ -53,6 +53,8 @@ namespace gmx::esp
 namespace
 {
 
+constexpr double c_pi = 3.141592653589793238462643383279502884;
+
 void buildMatrixCoefficients(double              lambda,
                              int                 n,
                              double              c,
@@ -363,6 +365,68 @@ double integrateNormalizedPswf(const std::vector<double>&              coefficie
     return sum * h / 3.0;
 }
 
+std::vector<double> chebNodes(int n)
+{
+    std::vector<double> nodes(n);
+    for (int k = 0; k < n; ++k)
+    {
+        nodes[k] = std::cos(c_pi * (k + 0.5) / n);
+    }
+    return nodes;
+}
+
+std::vector<double> chebSamplesToMonomial(const std::vector<double>& fSamples)
+{
+    const int           n = static_cast<int>(fSamples.size());
+    std::vector<double> chebCoefficients(n, 0.0);
+    for (int j = 0; j < n; ++j)
+    {
+        double sum = 0.0;
+        for (int k = 0; k < n; ++k)
+        {
+            sum += fSamples[k] * std::cos(c_pi * j * (k + 0.5) / n);
+        }
+        chebCoefficients[j] = (j == 0 ? 1.0 : 2.0) * sum / n;
+    }
+
+    std::vector<std::vector<double>> chebToMonomial(n, std::vector<double>(n, 0.0));
+    chebToMonomial[0][0] = 1.0;
+    if (n > 1)
+    {
+        chebToMonomial[1][1] = 1.0;
+    }
+    for (int k = 2; k < n; ++k)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            chebToMonomial[k][j] =
+                    2.0 * (j > 0 ? chebToMonomial[k - 1][j - 1] : 0.0)
+                    - chebToMonomial[k - 2][j];
+        }
+    }
+
+    std::vector<double> monomial(n, 0.0);
+    for (int k = 0; k < n; ++k)
+    {
+        for (int j = 0; j <= k; ++j)
+        {
+            monomial[j] += chebCoefficients[k] * chebToMonomial[k][j];
+        }
+    }
+    return monomial;
+}
+
+int truncateToTol(std::vector<double>* monomial, double tol)
+{
+    int order = static_cast<int>(monomial->size());
+    while (order > 1 && std::abs((*monomial)[order - 1]) < tol)
+    {
+        --order;
+    }
+    monomial->resize(order);
+    return order;
+}
+
 struct Prolc180Calibration
 {
     double K;
@@ -536,16 +600,51 @@ int estimateOrder(double tolerance)
     return order;
 }
 
-void spreadRealPoly(int /*P*/,
-                    int /*P_padded*/,
-                    double /*tol*/,
-                    double /*r_tol*/,
-                    double /*c_w*/,
+void spreadRealPoly(int P,
+                    int P_padded,
+                    double tol,
+                    double r_tol,
+                    double c_w,
                     AlignedRealVector* coefs,
                     int*               polyOrderOut)
 {
-    coefs->clear();
-    *polyOrderOut = 0;
+    (void)r_tol;
+    GMX_ASSERT(P > 0 && P_padded >= P, "spreadRealPoly: invalid P or P_padded");
+    GMX_ASSERT(c_w > 0.0, "spreadRealPoly: c_w must be positive");
+
+    const Pswf0 psi(c_w);
+
+    constexpr int                  kInitialOrder = 24;
+    std::vector<std::vector<double>> perStencilCoefficients(P);
+    int                            globalPolyOrder = 0;
+    const std::vector<double>      uNodes          = chebNodes(kInitialOrder);
+
+    for (int k = 0; k < P; ++k)
+    {
+        std::vector<double> samples(kInitialOrder);
+        for (int i = 0; i < kInitialOrder; ++i)
+        {
+            const double u  = uNodes[i];
+            const double xi = static_cast<double>(k) - 0.5 * (P - 1) + u;
+            const double s  = 2.0 * xi / static_cast<double>(P);
+            samples[i]      = psi.eval(s);
+        }
+
+        std::vector<double> monomial = chebSamplesToMonomial(samples);
+        const int           order    = truncateToTol(&monomial, tol);
+        globalPolyOrder              = std::max(globalPolyOrder, order);
+        perStencilCoefficients[k]    = std::move(monomial);
+    }
+
+    coefs->assign(static_cast<std::size_t>(globalPolyOrder) * P_padded, 0.0);
+    for (int k = 0; k < P; ++k)
+    {
+        for (int l = 0; l < static_cast<int>(perStencilCoefficients[k].size()); ++l)
+        {
+            (*coefs)[l * P_padded + k] = static_cast<real>(perStencilCoefficients[k][l]);
+        }
+    }
+    *polyOrderOut = globalPolyOrder;
 }
 
 void spreadFourierPoly(double /*tol*/,

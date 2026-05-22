@@ -301,6 +301,64 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
     process_interaction_modifier(&ir->coulomb_modifier);
     process_interaction_modifier(&ir->vdw_modifier);
 
+    if (ir->coulombtype == CoulombInteractionType::Esp)
+    {
+        if (ir->espSettings.spreadAccuracy < 0.0_real)
+        {
+            ir->espSettings.spreadAccuracy = 0.25_real * ir->espSettings.accuracy;
+        }
+        if (ir->espSettings.accuracy < 1e-7_real || ir->espSettings.accuracy > 1e-2_real)
+        {
+            wi->addError(formatString("ESP: esp-accuracy = %g out of supported range [1e-7, 1e-2]",
+                                      ir->espSettings.accuracy));
+        }
+        if (ir->espSettings.stencilOrder > 0
+            && (ir->espSettings.stencilOrder < 4 || ir->espSettings.stencilOrder > 16))
+        {
+            wi->addError("ESP: esp-stencil-order must be in [4, 16] if explicitly set");
+        }
+        if (ir->pbcType != PbcType::Xyz)
+        {
+            gmx_fatal(FARGS,
+                      "ESP only supports 3D periodic boundary conditions (pbc=xyz). "
+                      "Got pbcType=%s. Use coulombtype=PME for non-xyz PBC.",
+                      c_pbcTypeNames[ir->pbcType].c_str());
+        }
+        if (ir->efep != FreeEnergyPerturbationType::No)
+        {
+            gmx_fatal(FARGS,
+                      "ESP is not yet compatible with free-energy perturbations "
+                      "(free-energy = %s). Use coulombtype=PME for FEP.",
+                      enumValueToString(ir->efep));
+        }
+        if (ir->pressureCouplingOptions.epc != PressureCoupling::No)
+        {
+            gmx_fatal(FARGS,
+                      "ESP does not yet implement pressure-tensor computation. "
+                      "NPT (pcoupl=%s) requires PME.",
+                      enumValueToString(ir->pressureCouplingOptions.epc));
+        }
+        if (ir->ewald_geometry != EwaldGeometry::ThreeD)
+        {
+            gmx_fatal(FARGS,
+                      "ESP only supports 3D Ewald geometry; got ewald-geometry=%s",
+                      enumValueToString(ir->ewald_geometry));
+        }
+        if (ir->nwall > 0)
+        {
+            gmx_fatal(FARGS, "ESP is not compatible with walls (got nwall = %d).", ir->nwall);
+        }
+        if (ir->rcoulomb < 0.2_real || ir->rcoulomb > 5.0_real)
+        {
+            wi->addError("ESP: rcoulomb out of recommended range [0.2, 5.0] nm");
+        }
+        if (ir->vdwtype != VanDerWaalsType::User && ir->rcoulomb != ir->rvdw)
+        {
+            wi->addError("ESP: rcoulomb != rvdw is not supported in MVP; "
+                         "the short-range NBNXM cutoffs are coupled.");
+        }
+    }
+
     if (ir->cutoff_scheme == CutoffScheme::Group)
     {
         gmx_fatal(FARGS,
@@ -1667,14 +1725,16 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
         // TODO: Move these checks into the ewald module with the options class
         int orderMin = 3;
         int orderMax = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 12);
+        int effectiveOrderMax =
+                (ir->coulombtype == CoulombInteractionType::Esp ? 16 : orderMax);
 
-        if (ir->pme_order < orderMin || ir->pme_order > orderMax)
+        if (ir->pme_order < orderMin || ir->pme_order > effectiveOrderMax)
         {
             sprintf(warn_buf,
                     "With coulombtype = %s, you should have %d <= pme-order <= %d",
                     enumValueToString(ir->coulombtype),
                     orderMin,
-                    orderMax);
+                    effectiveOrderMax);
             wi->addError(warn_buf);
         }
     }
@@ -2497,6 +2557,9 @@ void get_ir(const char*     mdparin,
     setStringEntry(&inp, "energygrp-table", inputrecStrings->egptable, nullptr);
     printStringNoNewline(&inp, "Spacing for the PME/PPPM FFT grid");
     ir->fourier_spacing = get_ereal(&inp, "fourierspacing", 0.12, wi);
+    ir->espSettings.accuracy        = get_ereal(&inp, "esp-accuracy", 1e-4, wi);
+    ir->espSettings.spreadAccuracy  = get_ereal(&inp, "esp-spread-accuracy", -1.0, wi);
+    ir->espSettings.stencilOrder    = get_eint(&inp, "esp-stencil-order", -1, wi);
     printStringNoNewline(&inp, "FFT grid size, when a value is 0 fourierspacing will be used");
     ir->nkx = get_eint(&inp, "fourier-nx", 0, wi);
     ir->nky = get_eint(&inp, "fourier-ny", 0, wi);

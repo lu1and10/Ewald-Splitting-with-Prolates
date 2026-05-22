@@ -45,6 +45,7 @@ gmx_add_gtest_executable(gmxpreprocess-test
         insert_molecules.cpp
         massrepartitioning.cpp
         readir.cpp
+        readir_esp_test.cpp
         solvate.cpp
         topdirs.cpp
         )

@@ -46,6 +46,8 @@
 #include <stdexcept>
 #include <vector>
 
+#include "gromacs/utility/gmxassert.h"
+
 namespace gmx::esp
 {
 namespace
@@ -361,6 +363,31 @@ double integrateNormalizedPswf(const std::vector<double>&              coefficie
     return sum * h / 3.0;
 }
 
+struct Prolc180Calibration
+{
+    double K;
+
+    static const Prolc180Calibration& instance()
+    {
+        static const Prolc180Calibration instance = [] {
+            constexpr std::array<double, 4> calibrationC = { 5.0, 10.0, 15.0, 20.0 };
+            double                          logKSum      = 0.0;
+            for (double c : calibrationC)
+            {
+                const Pswf0  psi(c);
+                const double psiAtOne = std::abs(psi.eval(1.0));
+                const double kLocal   = psiAtOne / (std::sqrt(c) * std::exp(-c));
+                logKSum += std::log(kLocal);
+            }
+
+            Prolc180Calibration out;
+            out.K = std::exp(logKSum / calibrationC.size());
+            return out;
+        }();
+        return instance;
+    }
+};
+
 } // namespace
 
 Pswf0::Pswf0(double c) : c_(c), lambda0_(0.0), normalizationAt0_(1.0)
@@ -441,14 +468,42 @@ double Pswf0::evalIntegral(double upper) const
     return sign * half * sum;
 }
 
-double prolc180(double /*tolerance*/)
+double prolc180(double tolerance)
 {
-    return 0.0;
+    if (tolerance <= 0.0 || tolerance >= 1.0)
+    {
+        throw std::invalid_argument("prolc180: tolerance must be in (0, 1)");
+    }
+
+    const double k = Prolc180Calibration::instance().K;
+    double       c = std::log(1.0 / tolerance)
+               + 0.5 * std::log(std::log(1.0 / tolerance) + 1.0);
+
+    for (int iter = 0; iter < 50; ++iter)
+    {
+        const double f     = c - 0.5 * std::log(c) - std::log(k / tolerance);
+        const double fPrim = 1.0 - 0.5 / c;
+        const double delta = f / fPrim;
+        c -= delta;
+        if (std::abs(delta) < 1e-10 * std::abs(c))
+        {
+            break;
+        }
+    }
+
+    GMX_ASSERT(c > 0.0 && c < 30.0, "prolc180 result out of expected range");
+    return c;
 }
 
-double prolc180Der(double /*tolerance*/)
+double prolc180Der(double tolerance)
 {
-    return 0.0;
+    if (tolerance <= 0.0 || tolerance >= 1.0)
+    {
+        throw std::invalid_argument("prolc180Der: tolerance must be in (0, 1)");
+    }
+
+    const double inverseLog = 1.0 / std::log(1.0 / tolerance);
+    return -(1.0 + 0.5 * inverseLog) / tolerance;
 }
 
 double pswfSplitFunction(const Pswf0& /*psi*/, double /*rcInv*/, double /*x*/)

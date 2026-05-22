@@ -137,5 +137,23 @@ TEST(Pswf0, IntegralAtOneEqualsHalfLambda0OverPsiAtZero)
     EXPECT_NEAR(psi.evalIntegral(1.0), 0.5 * lambda0, 1e-9);
 }
 
+TEST(Prolc180, MonotoneInTolerance)
+{
+    const double c3 = prolc180(1e-3);
+    const double c4 = prolc180(1e-4);
+    const double c5 = prolc180(1e-5);
+    EXPECT_LT(c3, c4);
+    EXPECT_LT(c4, c5);
+}
+
+TEST(Prolc180, MatchesPaper3Table2)
+{
+    EXPECT_NEAR(prolc180(1e-3), 9.5392, 0.5);
+    EXPECT_NEAR(prolc180(5e-4), 10.290, 0.5);
+    EXPECT_NEAR(prolc180(1e-4), 12.024, 0.5);
+    EXPECT_NEAR(prolc180(5e-5), 12.762, 0.6);
+    EXPECT_NEAR(prolc180(1e-5), 14.471, 0.6);
+}
+
 } // namespace
 } // namespace gmx::esp::test

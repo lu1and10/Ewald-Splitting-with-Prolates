@@ -647,14 +647,38 @@ void spreadRealPoly(int P,
     *polyOrderOut = globalPolyOrder;
 }
 
-void spreadFourierPoly(double /*tol*/,
-                       double /*r_tol*/,
-                       double /*c_w*/,
+void spreadFourierPoly(double tol,
+                       double r_tol,
+                       double c_w,
                        AlignedRealVector* coefs,
                        int*               polyOrderOut)
 {
-    coefs->clear();
-    *polyOrderOut = 0;
+    (void)r_tol;
+    GMX_ASSERT(c_w > 0.0, "spreadFourierPoly: c_w must be positive");
+
+    const Pswf0  psi(c_w);
+    const double psiAt0Squared = psi.eval(0.0) * psi.eval(0.0);
+
+    constexpr int             kInitialOrder = 32;
+    const std::vector<double> nodes          = chebNodes(kInitialOrder);
+    std::vector<double>       samples(kInitialOrder);
+    for (int i = 0; i < kInitialOrder; ++i)
+    {
+        const double s     = std::abs(nodes[i]);
+        const double psiAtS = psi.eval(s);
+        samples[i]         = (psiAtS * psiAtS) / psiAt0Squared;
+    }
+
+    std::vector<double> monomial = chebSamplesToMonomial(samples);
+    const int           order    = truncateToTol(&monomial, tol);
+
+    coefs->assign(order, 0.0);
+    for (int j = 0; j < order; ++j)
+    {
+        (*coefs)[j] = static_cast<real>(monomial[j]);
+    }
+    (*coefs)[0]   = 1.0;
+    *polyOrderOut = order;
 }
 
 void shortRangeForcePoly(double, double, double, AlignedRealVector* coefs, int* polyOrderOut)

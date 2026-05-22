@@ -36,6 +36,7 @@
 
 #include "gromacs/math/pswf.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 
@@ -239,6 +240,34 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
                     << "l=" << l << " k=" << k;
         }
     }
+}
+
+TEST(SpreadFourierPoly, AtZeroEqualsOne)
+{
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    spreadFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+    EXPECT_NEAR(coefs[0], 1.0, 1e-10);
+}
+
+TEST(SpreadFourierPoly, MatchesNormalisedPsiSquaredAt03)
+{
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    spreadFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0        psi(12.024);
+    const double s   = 0.3;
+    const double ref = std::pow(psi.eval(s) / psi.eval(0.0), 2.0);
+
+    double poly = coefs[polyOrder - 1];
+    for (int l = polyOrder - 2; l >= 0; --l)
+    {
+        poly = poly * s + coefs[l];
+    }
+    EXPECT_NEAR(poly, ref, 1e-6);
 }
 
 } // namespace

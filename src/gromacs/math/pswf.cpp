@@ -316,6 +316,31 @@ double evaluateRawDerivative(const std::vector<double>&              coefficient
     return dValue;
 }
 
+struct GLNode
+{
+    double x;
+    double weight;
+};
+
+constexpr std::array<GLNode, 16> c_gaussLegendreNodes16 = { {
+        { -0.989400934991649932, 0.027152459411754095 },
+        { -0.944575023073232576, 0.062253523938647893 },
+        { -0.865631202387831744, 0.095158511682492785 },
+        { -0.755404408355003034, 0.124628971255533872 },
+        { -0.617876244402643748, 0.149595988816576732 },
+        { -0.458016777657227386, 0.169156519395002538 },
+        { -0.281603550779258913, 0.182603415044923589 },
+        { -0.095012509837637440, 0.189450610455068496 },
+        { 0.095012509837637440, 0.189450610455068496 },
+        { 0.281603550779258913, 0.182603415044923589 },
+        { 0.458016777657227386, 0.169156519395002538 },
+        { 0.617876244402643748, 0.149595988816576732 },
+        { 0.755404408355003034, 0.124628971255533872 },
+        { 0.865631202387831744, 0.095158511682492785 },
+        { 0.944575023073232576, 0.062253523938647893 },
+        { 0.989400934991649932, 0.027152459411754095 },
+} };
+
 double integrateNormalizedPswf(const std::vector<double>&              coefficients,
                                const std::vector<std::array<double, 3>>& recurrenceCoefficients,
                                double                                  normalizationAt0)
@@ -396,9 +421,24 @@ double Pswf0::evalDerivative(double x) const
     return evaluateRawDerivative(legendreCoefficients_, recurrenceCoefficients_, x) * normalizationAt0_;
 }
 
-double Pswf0::evalIntegral(double /*upper*/) const
+double Pswf0::evalIntegral(double upper) const
 {
-    return 0.0;
+    if (upper == 0.0)
+    {
+        return 0.0;
+    }
+
+    const double sign  = (upper < 0.0) ? -1.0 : 1.0;
+    const double limit = std::min(std::abs(upper), 1.0);
+    const double half  = 0.5 * limit;
+
+    double sum = 0.0;
+    for (const auto& node : c_gaussLegendreNodes16)
+    {
+        sum += node.weight * eval(half * (node.x + 1.0));
+    }
+
+    return sign * half * sum;
 }
 
 double prolc180(double /*tolerance*/)

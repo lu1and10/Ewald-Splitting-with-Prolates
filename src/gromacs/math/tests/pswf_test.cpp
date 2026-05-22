@@ -124,5 +124,18 @@ TEST(Pswf0, EvalDerivativeAtZeroIsZero)
     EXPECT_NEAR(psi.evalDerivative(0.0), 0.0, 1e-12);
 }
 
+TEST(Pswf0, IntegralAtZeroIsZero)
+{
+    Pswf0 psi(8.0);
+    EXPECT_NEAR(psi.evalIntegral(0.0), 0.0, 1e-14);
+}
+
+TEST(Pswf0, IntegralAtOneEqualsHalfLambda0OverPsiAtZero)
+{
+    Pswf0        psi(8.0);
+    const double lambda0 = psi.lambda0();
+    EXPECT_NEAR(psi.evalIntegral(1.0), 0.5 * lambda0, 1e-9);
+}
+
 } // namespace
 } // namespace gmx::esp::test

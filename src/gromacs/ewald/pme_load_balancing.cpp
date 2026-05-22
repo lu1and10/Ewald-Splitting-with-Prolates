@@ -322,7 +322,8 @@ bool pmeTuningIsSupported(const CoulombInteractionType coulombInteractionType,
 {
     // Note that we would like to quit with an error message when the user actively requested PME tuning
     // but we do not support. But currently -tunepme is a boolean option with default true; we would need auto.
-    return usingPme(coulombInteractionType) && !reproducibilityRequested
+    return usingPme(coulombInteractionType) && !usingEsp(coulombInteractionType)
+           && !reproducibilityRequested
            && (simulationWork.useGpuNonbonded || simulationWork.haveSeparatePmeRank)
            && !simulationWork.useGpuPmeDecomposition;
 }

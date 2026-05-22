@@ -48,6 +48,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "gromacs/mdtypes/inputrec.h"
+#include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/taskassignment/decidegpuusage.h"
 #include "gromacs/utility/exceptions.h"
 
 namespace gmx
@@ -149,6 +152,17 @@ TEST(GpuIdAndAssignmentStringHandlingTest, InvalidInputsThrow)
             EXPECT_THROW(parseUserGpuIdString(s), InvalidInputError) << "for string " << s;
         }
     }
+}
+
+TEST(DecideGpuUsageTest, EspNonbondedGpuIsRejected)
+{
+    t_inputrec inputrec;
+    inputrec.coulombtype = CoulombInteractionType::Esp;
+
+    std::string error;
+    EXPECT_FALSE(canUseGpusForNonbonded(inputrec, false, &error));
+    EXPECT_THAT(error, ::testing::HasSubstr("ESP electrostatics"));
+    EXPECT_THAT(error, ::testing::HasSubstr("CPU-only"));
 }
 
 } // namespace

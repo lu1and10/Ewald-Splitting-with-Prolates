@@ -35,6 +35,7 @@ gmx_add_unit_test(NbnxmTests nbnxm-test
     OPENMP_THREADS
         2
     CPP_SOURCE_FILES
+        esp_coulomb_calculator.cpp
         exclusions.cpp
         grid.cpp
         kernel_test.cpp

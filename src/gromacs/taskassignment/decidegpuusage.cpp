@@ -187,6 +187,9 @@ bool canUseGpusForNonbonded(const t_inputrec& ir, const bool doRerun, std::strin
     // Before changing the prefix string, make sure that it is not searched for in regression tests.
     errorReasons.startContext("Nonbonded interactions on GPUs are not supported:");
     errorReasons.appendIf(!GMX_GPU, "Non-GPU build of GROMACS.");
+    errorReasons.appendIf(ir.coulombtype == CoulombInteractionType::Esp,
+                          "ESP electrostatics (coulombtype=esp) is CPU-only in this release. "
+                          "Add -nb cpu to mdrun or switch to coulombtype=PME for GPU.");
     if (ir.opts.ngener - ir.nwall > 1)
     {
         std::string errorMessage = "Multiple energy groups is not implemented for GPUs.";

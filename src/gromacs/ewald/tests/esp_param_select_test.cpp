@@ -36,10 +36,13 @@
 
 #include "gromacs/ewald/calculate_spline_moduli.h"
 #include "gromacs/ewald/esp_param_select.h"
+#include "gromacs/ewald/pme_load_balancing.h"
 
 #include <gtest/gtest.h>
 
 #include "gromacs/math/pswf.h"
+#include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/mdtypes/simulation_workload.h"
 #include "gromacs/utility/logger.h"
 
 namespace gmx::esp::test
@@ -192,6 +195,15 @@ TEST(MakePswfModuli, SymmetricAroundNyquist)
         EXPECT_NEAR(bspMod[XX][m], bspMod[XX][esp.nx - m], 1e-10_real)
                 << "Symmetry failed at m=" << m;
     }
+}
+
+TEST(EspRuntimeGuards, PmeLoadBalancingIsUnsupportedForEsp)
+{
+    SimulationWorkload simulationWork;
+    simulationWork.useGpuNonbonded = true;
+
+    EXPECT_TRUE(pmeTuningIsSupported(CoulombInteractionType::Pme, false, simulationWork));
+    EXPECT_FALSE(pmeTuningIsSupported(CoulombInteractionType::Esp, false, simulationWork));
 }
 
 } // namespace

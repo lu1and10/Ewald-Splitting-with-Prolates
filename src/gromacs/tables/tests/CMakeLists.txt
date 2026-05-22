@@ -33,6 +33,7 @@
 
 gmx_add_unit_test(TableUnitTests table-test
     CPP_SOURCE_FILES
+        esp_forcetable.cpp
         splinetable.cpp
         )
-target_link_libraries(table-test PRIVATE simd)
+target_link_libraries(table-test PRIVATE mdtypes simd tables)

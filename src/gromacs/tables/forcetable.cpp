@@ -292,6 +292,70 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
     return tables;
 }
 
+static real evaluateEspShortRangePolynomial(const gmx::esp::AlignedRealVector& coefs,
+                                            const int                          order,
+                                            const real                         s)
+{
+    GMX_ASSERT(order > 0, "ESP short-range polynomial order must be positive");
+    GMX_ASSERT(coefs.size() >= static_cast<size_t>(order),
+               "ESP short-range polynomial coefficient table is too small");
+
+    real value = coefs[order - 1];
+    for (int i = order - 2; i >= 0; --i)
+    {
+        value = value * s + coefs[i];
+    }
+    return value;
+}
+
+EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, const int numPoints)
+{
+    if (numPoints < 2)
+    {
+        gmx_fatal(FARGS, "Can not make an ESP short-range table with less than 2 points");
+    }
+    GMX_ASSERT(ic.esp.cutoff > 0, "ESP short-range table requires a positive cutoff");
+    GMX_ASSERT(ic.esp.energyPolyOrder > 0 && ic.esp.forcePolyOrder > 0,
+               "ESP short-range table requires populated polynomials");
+
+    EwaldCorrectionTables tables;
+    tables.scale = static_cast<real>(numPoints - 1) / ic.esp.cutoff;
+    tables.tableF.resize(numPoints);
+    tables.tableV.resize(numPoints);
+    tables.tableFDV0.resize(numPoints * 4);
+
+    const real invCutoff = 1.0_real / ic.esp.cutoff;
+    for (int i = 0; i < numPoints; ++i)
+    {
+        const real r = static_cast<real>(i) / tables.scale;
+        const real s = r * invCutoff;
+
+        tables.tableV[i] = evaluateEspShortRangePolynomial(
+                                   ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s)
+                           * invCutoff;
+        tables.tableF[i] = -s
+                           * evaluateEspShortRangePolynomial(
+                                   ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s)
+                           * invCutoff;
+    }
+
+    for (int i = 0; i < numPoints - 1; ++i)
+    {
+        tables.tableFDV0[4 * i]     = tables.tableF[i];
+        tables.tableFDV0[4 * i + 1] = tables.tableF[i + 1] - tables.tableF[i];
+        tables.tableFDV0[4 * i + 2] = tables.tableV[i];
+        tables.tableFDV0[4 * i + 3] = 0.0_real;
+    }
+
+    const int lastPoint                = numPoints - 1;
+    tables.tableFDV0[4 * lastPoint]     = tables.tableF[lastPoint];
+    tables.tableFDV0[4 * lastPoint + 1] = -tables.tableF[lastPoint];
+    tables.tableFDV0[4 * lastPoint + 2] = tables.tableV[lastPoint];
+    tables.tableFDV0[4 * lastPoint + 3] = 0.0_real;
+
+    return tables;
+}
+
 /* Returns the spacing for a function using the maximum of
  * the third derivative, x_scale (unit 1/length)
  * and function tolerance.

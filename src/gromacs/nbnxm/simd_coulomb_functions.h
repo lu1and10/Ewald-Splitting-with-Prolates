@@ -134,10 +134,25 @@ class CoulombCalculator<KernelCoulombType::EwaldAnalytical>
 {
 public:
     inline CoulombCalculator(const interaction_const_t& ic) :
+        useEsp_(ic.coulomb.type == CoulombInteractionType::Esp),
         beta_(ic.coulomb.ewaldCoeff),
         betaSquared_(gmx::square(ic.coulomb.ewaldCoeff)),
-        selfEnergy_(0.5_real * ic.coulomb.ewaldCoeff * M_2_SQRTPI) // beta/sqrt(pi)
+        espInvCutoff_(ic.esp.cutoff > 0 ? 1.0_real / ic.esp.cutoff : 0.0_real),
+        espEwaldShift_(ic.coulomb.ewaldShift),
+        espForcePolyCoeff_(ic.esp.forcePolyCoeff.data()),
+        espEnergyPolyCoeff_(ic.esp.energyPolyCoeff.data()),
+        espForcePolyOrder_(ic.esp.forcePolyOrder),
+        espEnergyPolyOrder_(ic.esp.energyPolyOrder),
+        selfEnergy_(ic.coulomb.type == CoulombInteractionType::Esp
+                            ? -ic.esp.selfCoeff
+                            : 0.5_real * ic.coulomb.ewaldCoeff * M_2_SQRTPI) // beta/sqrt(pi)
     {
+        if (useEsp_)
+        {
+            GMX_ASSERT(ic.esp.cutoff > 0, "ESP short-range calculator requires a positive cutoff");
+            GMX_ASSERT(espForcePolyOrder_ > 0 && espEnergyPolyOrder_ > 0,
+                       "ESP short-range calculator requires populated polynomials");
+        }
     }
 
     //! Returns the self energy
@@ -145,10 +160,24 @@ public:
 
     template<int nR>
     gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>&            rSquaredV,
-                                              const std::array<SimdReal, nR> gmx_unused& dummyRInvV,
+                                              const std::array<SimdReal, nR>&            dummyRInvV,
                                               const std::array<SimdReal, nR>&            rInvExclV,
                                               const std::array<SimdBool, nR>& withinCutoffV)
     {
+        if (useEsp_)
+        {
+            return genArr<nR>(
+                    [&](int i)
+                    {
+                        const SimdReal r = rSquaredV[i] * dummyRInvV[i];
+                        const SimdReal s = r * espInvCutoff_;
+                        const SimdReal dL = evaluateEspPolynomial(espForcePolyCoeff_, espForcePolyOrder_, s);
+                        const SimdReal shortRangeForceR = -s * espInvCutoff_ * dL;
+                        return selectByMask(shortRangeForceR + rInvExclV[i] - dummyRInvV[i],
+                                            withinCutoffV[i]);
+                    });
+        }
+
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 
@@ -166,6 +195,23 @@ public:
                                              std::array<SimdReal, nR>&         forceV,
                                              std::array<SimdReal, energySize>& correctionEnergyV)
     {
+        if (useEsp_)
+        {
+            forceV = force<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+            correctionEnergyV = genArr<energySize>(
+                    [&](int i)
+                    {
+                        const SimdReal r = rSquaredV[i] * rInvV[i];
+                        const SimdReal s = r * espInvCutoff_;
+                        const SimdReal shortRangePotential =
+                                evaluateEspPolynomial(espEnergyPolyCoeff_, espEnergyPolyOrder_, s)
+                                * espInvCutoff_;
+                        return selectByMask(rInvV[i] - shortRangePotential - espEwaldShift_,
+                                            withinCutoffV[i]);
+                    });
+            return;
+        }
+
         const auto brsqV = genArr<nR>(
                 [&](int i) { return betaSquared_ * selectByMask(rSquaredV[i], withinCutoffV[i]); });
 
@@ -180,10 +226,36 @@ public:
     }
 
 private:
+    gmx_inline SimdReal evaluateEspPolynomial(const real* const coefs,
+                                              const int         order,
+                                              const SimdReal&   s) const
+    {
+        SimdReal value(coefs[order - 1]);
+        for (int i = order - 2; i >= 0; --i)
+        {
+            value = fma(value, s, SimdReal(coefs[i]));
+        }
+        return value;
+    }
+
+    //! Whether this calculator evaluates ESP instead of Gaussian Ewald.
+    const bool useEsp_;
     //! Ewald beta
     const SimdReal beta_;
     //! Ewald beta^2
     const SimdReal betaSquared_;
+    //! 1 / ESP short-range cutoff.
+    const SimdReal espInvCutoff_;
+    //! Existing Ewald shift, compensated before the outer kernel adds it.
+    const SimdReal espEwaldShift_;
+    //! ESP short-range force polynomial coefficients.
+    const real* const espForcePolyCoeff_;
+    //! ESP short-range energy polynomial coefficients.
+    const real* const espEnergyPolyCoeff_;
+    //! ESP short-range force polynomial order.
+    const int espForcePolyOrder_;
+    //! ESP short-range energy polynomial order.
+    const int espEnergyPolyOrder_;
     //! The self energy of the reciprocal part
     const real selfEnergy_;
 };

@@ -338,6 +338,64 @@ void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<r
     }
 }
 
+void make_pswfs_and_dpswfs(const gmx_pme_t* pme,
+                           real             fx,
+                           real             fy,
+                           real             fz,
+                           gmx::ArrayRef<real> rho1d_out,
+                           gmx::ArrayRef<real> drho1d_out)
+{
+    GMX_ASSERT(pme != nullptr, "ESP spread requires a valid PME object");
+    const EspParameters& esp        = pme->espRuntime;
+    const int            P          = esp.P;
+    const int            Pp         = esp.P_padded;
+    const int            polyOrder  = esp.poly_order;
+    const int            dPolyOrder = esp.poly_order - 1;
+
+    GMX_ASSERT(P > 0, "ESP spread requires positive stencil order");
+    GMX_ASSERT(Pp >= P, "ESP spread requires P_padded >= P");
+    GMX_ASSERT(Pp % GMX_SIMD_REAL_WIDTH == 0, "ESP spread requires SIMD-aligned P_padded");
+    GMX_ASSERT(polyOrder > 0, "ESP spread requires a positive polynomial order");
+    GMX_ASSERT(dPolyOrder > 0, "ESP spread derivative requires at least a linear polynomial");
+    GMX_ASSERT(esp.rho_coeff.size() >= static_cast<size_t>(polyOrder * Pp),
+               "ESP spread coefficient table is too small");
+    GMX_ASSERT(esp.drho_coeff.size() >= static_cast<size_t>(dPolyOrder * Pp),
+               "ESP spread derivative coefficient table is too small");
+    GMX_ASSERT(rho1d_out.ssize() == DIM * Pp, "rho1d_out must be sized 3 * P_padded");
+    GMX_ASSERT(drho1d_out.ssize() == DIM * Pp, "drho1d_out must be sized 3 * P_padded");
+
+    const std::array<real, DIM> x = { fx, fy, fz };
+    const real* const           rhoCoefs  = esp.rho_coeff.data();
+    const real* const           drhoCoefs = esp.drho_coeff.data();
+
+    for (int dim = 0; dim < DIM; ++dim)
+    {
+        real* const rhoDim  = rho1d_out.data() + dim * Pp;
+        real* const drhoDim = drho1d_out.data() + dim * Pp;
+        const gmx::SimdReal xSimd(x[dim]);
+
+        for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
+        {
+            gmx::SimdReal rho =
+                    gmx::load<gmx::SimdReal>(&rhoCoefs[(polyOrder - 1) * Pp + k]);
+            for (int order = polyOrder - 2; order >= 0; --order)
+            {
+                rho = gmx::fma(rho, xSimd, gmx::load<gmx::SimdReal>(&rhoCoefs[order * Pp + k]));
+            }
+            gmx::storeU(rhoDim + k, rho);
+
+            gmx::SimdReal drho =
+                    gmx::load<gmx::SimdReal>(&drhoCoefs[(dPolyOrder - 1) * Pp + k]);
+            for (int order = dPolyOrder - 2; order >= 0; --order)
+            {
+                drho = gmx::fma(
+                        drho, xSimd, gmx::load<gmx::SimdReal>(&drhoCoefs[order * Pp + k]));
+            }
+            gmx::storeU(drhoDim + k, drho);
+        }
+    }
+}
+
 static void make_pswf_splines(gmx::ArrayRef<real*> theta,
                               gmx::ArrayRef<real*> dtheta,
                               const gmx_pme_t*     pme,
@@ -353,24 +411,27 @@ static void make_pswf_splines(gmx::ArrayRef<real*> theta,
 
     GMX_ASSERT(P == pme->pme_order, "ESP spread expects pme_order to match esp.P");
     std::vector<real> rhoScratch(DIM * Pp, real(0));
+    std::vector<real> drhoScratch(DIM * Pp, real(0));
 
     for (int i = 0; i < nr; i++)
     {
         const int ii = ind[i];
         if (computeAllSplineCoefficients || coefficient[ii] != 0.0)
         {
-            make_pswfs(pme,
-                       fractx[ii][XX],
-                       fractx[ii][YY],
-                       fractx[ii][ZZ],
-                       gmx::arrayRefFromArray(rhoScratch.data(), rhoScratch.size()));
+            make_pswfs_and_dpswfs(
+                    pme,
+                    fractx[ii][XX],
+                    fractx[ii][YY],
+                    fractx[ii][ZZ],
+                    gmx::arrayRefFromArray(rhoScratch.data(), rhoScratch.size()),
+                    gmx::arrayRefFromArray(drhoScratch.data(), drhoScratch.size()));
 
             for (int dim = 0; dim < DIM; ++dim)
             {
                 real* const thetaDim  = theta[dim] + i * P;
                 real* const dthetaDim = dtheta[dim] + i * P;
                 std::copy_n(rhoScratch.data() + dim * Pp, P, thetaDim);
-                std::fill_n(dthetaDim, P, real(0));
+                std::copy_n(drhoScratch.data() + dim * Pp, P, dthetaDim);
             }
         }
     }

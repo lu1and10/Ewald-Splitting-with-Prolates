@@ -27,6 +27,7 @@
 #include "gmxpre.h"
 
 #include "gromacs/ewald/pme_internal.h"
+#include "gromacs/ewald/pme_gather.h"
 #include "gromacs/ewald/pme_spread.h"
 #include "gromacs/simd/simd.h"
 #include "gromacs/utility/arrayref.h"
@@ -147,6 +148,40 @@ TEST(EspSpread, PaddingDoesNotPollute)
         {
             EXPECT_EQ(rho[dim * esp.P_padded + k], real(0)) << "dim=" << dim << " k=" << k;
         }
+    }
+}
+
+TEST(EspSpread, EagerDerivativeMatchesGatherDerivativeEvaluator)
+{
+    EspParameters esp = makeHornerEsp();
+    esp.drho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
+    for (int order = 0; order < esp.poly_order - 1; ++order)
+    {
+        for (int k = 0; k < esp.P; ++k)
+        {
+            esp.drho_coeff[order * esp.P_padded + k] =
+                    real(order + 1) * esp.rho_coeff[(order + 1) * esp.P_padded + k];
+        }
+    }
+
+    gmx_pme_t pme(nullptr);
+    pme.espRuntime = esp;
+
+    std::vector<real> theta(DIM * esp.P_padded, real(0));
+    std::vector<real> dtheta(DIM * esp.P_padded, real(0));
+    std::vector<real> gatherDerivative(DIM * esp.P_padded, real(0));
+
+    make_pswfs_and_dpswfs(&pme,
+                          real(0.25),
+                          real(0.50),
+                          real(0.75),
+                          gmx::makeArrayRef(theta),
+                          gmx::makeArrayRef(dtheta));
+    gather_f_pswfs(&pme, real(0.25), real(0.50), real(0.75), gmx::makeArrayRef(gatherDerivative));
+
+    for (int k = 0; k < DIM * esp.P_padded; ++k)
+    {
+        EXPECT_NEAR(dtheta[k], gatherDerivative[k], real(1e-6)) << "k=" << k;
     }
 }
 

@@ -26,16 +26,17 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/ewald/pme_gather.h"
-#include "gromacs/ewald/pme_internal.h"
-#include "gromacs/ewald/pme_spread.h"
-#include "gromacs/simd/simd.h"
-#include "gromacs/utility/arrayref.h"
-
 #include <array>
 #include <vector>
 
 #include <gtest/gtest.h>
+
+#include "gromacs/ewald/pme_gather.h"
+#include "gromacs/ewald/pme_internal.h"
+#include "gromacs/ewald/pme_simd.h"
+#include "gromacs/ewald/pme_spread.h"
+#include "gromacs/simd/simd.h"
+#include "gromacs/utility/arrayref.h"
 
 namespace gmx::test
 {
@@ -106,15 +107,15 @@ real scalarHorner(gmx::ArrayRef<const real> coefs, int order, int Pp, real x, in
 
 TEST(EspGather, AdjointToSpread)
 {
-    const EspParameters esp = makeDerivativeEsp();
-    const std::array<real, DIM> x = { real(0.22), real(0.41), real(0.68) };
-    const std::array<real, DIM> dx = { real(1e-3), real(0), real(0) };
+    const EspParameters         esp = makeDerivativeEsp();
+    const std::array<real, DIM> x   = { real(0.22), real(0.41), real(0.68) };
+    const std::array<real, DIM> dx  = { real(1e-3), real(0), real(0) };
     const std::vector<real> gridWeights = { real(0.7), real(-0.2), real(0.4), real(0.9), real(-0.1) };
 
     auto weightedSpread = [&](const std::array<real, DIM>& xEval)
     {
-        const std::vector<real> rho = evaluateSpread(esp, xEval);
-        real value = real(0);
+        const std::vector<real> rho   = evaluateSpread(esp, xEval);
+        real                    value = real(0);
         for (int k = 0; k < esp.P; ++k)
         {
             value += rho[XX * esp.P_padded + k] * gridWeights[k];
@@ -122,8 +123,8 @@ TEST(EspGather, AdjointToSpread)
         return value;
     };
 
-    const std::vector<real> drho = evaluateDerivative(esp, x);
-    real gatherDerivative = real(0);
+    const std::vector<real> drho             = evaluateDerivative(esp, x);
+    real                    gatherDerivative = real(0);
     for (int k = 0; k < esp.P; ++k)
     {
         gatherDerivative += drho[XX * esp.P_padded + k] * gridWeights[k];
@@ -140,20 +141,33 @@ TEST(EspGather, AdjointToSpread)
 
 TEST(EspGather, AnalyticDerivativeMatchesFiniteDiff)
 {
-    const EspParameters esp = makeDerivativeEsp();
-    const std::array<real, DIM> x = { real(0.17), real(0.53), real(0.81) };
-    const std::vector<real> drho = evaluateDerivative(esp, x);
+    const EspParameters         esp  = makeDerivativeEsp();
+    const std::array<real, DIM> x    = { real(0.17), real(0.53), real(0.81) };
+    const std::vector<real>     drho = evaluateDerivative(esp, x);
 
     for (int dim = 0; dim < DIM; ++dim)
     {
         for (int k = 0; k < esp.P_padded; ++k)
         {
-            const real expected =
-                    scalarHorner(gmx::makeConstArrayRef(esp.drho_coeff), esp.poly_order - 1, esp.P_padded, x[dim], k);
-            EXPECT_NEAR(drho[dim * esp.P_padded + k], expected, real(1e-6))
-                    << "dim=" << dim << " k=" << k;
+            const real expected = scalarHorner(
+                    gmx::makeConstArrayRef(esp.drho_coeff), esp.poly_order - 1, esp.P_padded, x[dim], k);
+            EXPECT_NEAR(drho[dim * esp.P_padded + k], expected, real(1e-6)) << "dim=" << dim << " k=" << k;
         }
     }
+}
+
+TEST(EspGather, Simd4SpecializationCoverageIncludesEspOrders)
+{
+#ifndef PME_SIMD4_SPREAD_GATHER
+    GTEST_SKIP() << "SIMD4 PME spread/gather is not enabled in this build";
+#endif
+
+    EXPECT_TRUE(gather_f_bsplines_has_simd4_specialization(4));
+    EXPECT_TRUE(gather_f_bsplines_has_simd4_specialization(5));
+    EXPECT_TRUE(gather_f_bsplines_has_simd4_specialization(6));
+    EXPECT_TRUE(gather_f_bsplines_has_simd4_specialization(7));
+    EXPECT_TRUE(gather_f_bsplines_has_simd4_specialization(8));
+    EXPECT_FALSE(gather_f_bsplines_has_simd4_specialization(9));
 }
 
 } // namespace

@@ -546,7 +546,7 @@ void unwrap_periodic_pmegrid(gmx_pme_t* pme, gmx::ArrayRef<real> pmegrid)
 void set_grid_alignment(int gmx_unused* pmegrid_nz, int gmx_unused pme_order)
 {
 #ifdef PME_SIMD4_SPREAD_GATHER
-    if (pme_order == 5
+    if ((pme_order >= 5 && pme_order <= 8)
 #    if !PME_4NSIMD_GATHER
         || pme_order == 4
 #    endif
@@ -612,7 +612,7 @@ static void pmegrid_init(pmegrid_t*           grid,
 
     // When using aligned SIMD4 operations, check the alignment of the memory
 #ifdef PME_SIMD4_SPREAD_GATHER
-    if (pme_order == 5
+    if ((pme_order >= 5 && pme_order <= 8)
 #    if !PME_4NSIMD_GATHER
         || pme_order == 4
 #    endif

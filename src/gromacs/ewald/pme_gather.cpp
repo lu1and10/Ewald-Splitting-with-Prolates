@@ -66,12 +66,12 @@ void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayR
                "ESP gather derivative coefficient table is too small");
     GMX_ASSERT(drho1d_out.ssize() == DIM * Pp, "drho1d_out must be sized 3 * P_padded");
 
-    const std::array<real, DIM> x = { fx, fy, fz };
+    const std::array<real, DIM> x     = { fx, fy, fz };
     const real* const           coefs = esp.drho_coeff.data();
 
     for (int dim = 0; dim < DIM; ++dim)
     {
-        real* const outDim = drho1d_out.data() + dim * Pp;
+        real* const    outDim = drho1d_out.data() + dim * Pp;
         const SimdReal xSimd(x[dim]);
 
         for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
@@ -84,6 +84,21 @@ void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayR
             storeU(outDim + k, drho);
         }
     }
+}
+
+bool gather_f_bsplines_has_simd4_specialization(int order)
+{
+    if (order == 4 && PME_4NSIMD_GATHER)
+    {
+        return true;
+    }
+
+#ifdef PME_SIMD4_SPREAD_GATHER
+    return order >= 4 && order <= 8;
+#else
+    GMX_UNUSED_VALUE(order);
+    return false;
+#endif
 }
 
 /* Spline function. Goals: 1) Force compiler to instantiate function separately
@@ -245,6 +260,29 @@ struct do_fspline
 #endif
 
 #ifdef PME_SIMD4_SPREAD_GATHER
+    /* Load order elements into three 4-wide SIMD registers without reading outside the
+     * coefficient array. P=6/7/8 needs a third block for unaligned z offsets.
+     */
+    template<int order>
+    static void loadOrderU3(const real* data,
+                            std::integral_constant<int, order> /*unused*/,
+                            int        offset,
+                            Simd4Real* S0,
+                            Simd4Real* S1,
+                            Simd4Real* S2)
+    {
+        alignas(GMX_SIMD_ALIGNMENT) real buf_aligned[GMX_SIMD4_WIDTH * 3] = {};
+        for (int i = 0; i < order; i++)
+        {
+            buf_aligned[offset + i] = data[i];
+        }
+        *S0 = load4(buf_aligned);
+        *S1 = load4(buf_aligned + GMX_SIMD4_WIDTH);
+        *S2 = load4(buf_aligned + 2 * GMX_SIMD4_WIDTH);
+    }
+#endif
+
+#ifdef PME_SIMD4_SPREAD_GATHER
     /* This code assumes that the grid is allocated 4-real aligned
      * and that pme.pmegrid_nz is a multiple of 4.
      * This code supports pme_order <= 5.
@@ -303,6 +341,82 @@ struct do_fspline
 
                 const Simd4Real fxy1_S = fxy1_S0 + fxy1_S1;
                 const Simd4Real fz1_S  = fz1_S0 + fz1_S1;
+
+                fx_S = fma(dx_S * ty_S, fxy1_S, fx_S);
+                fy_S = fma(tx_S * dy_S, fxy1_S, fy_S);
+                fz_S = fma(tx_S * ty_S, fz1_S, fz_S);
+            }
+        }
+
+        return { reduce(fx_S), reduce(fy_S), reduce(fz_S) };
+    }
+#endif
+
+#ifdef PME_SIMD4_SPREAD_GATHER
+    /* SIMD4 gather for ESP stencil orders 6, 7 and 8. This deliberately leaves
+     * the existing order 4/5 overloads unchanged; the third block is loaded
+     * only for z offsets that actually need it.
+     */
+    template<int Order>
+    std::enable_if_t<(Order >= 6 && Order <= 8), RVec> operator()(std::integral_constant<int, Order> order) const
+    {
+        const int norder = nn_ * order;
+        GMX_ASSERT(gridNZ % 4 == 0,
+                   "For aligned SIMD4 operations the grid size has to be padded up to a multiple "
+                   "of 4");
+        /* Pointer arithmetic alert, next six statements */
+        const real* const gmx_restrict thx  = spline_.theta.coefficients[XX] + norder;
+        const real* const gmx_restrict thy  = spline_.theta.coefficients[YY] + norder;
+        const real* const gmx_restrict thz  = spline_.theta.coefficients[ZZ] + norder;
+        const real* const gmx_restrict dthx = spline_.dtheta.coefficients[XX] + norder;
+        const real* const gmx_restrict dthy = spline_.dtheta.coefficients[YY] + norder;
+        const real* const gmx_restrict dthz = spline_.dtheta.coefficients[ZZ] + norder;
+
+        const pme_spline_work& work = *pme_.spline_work;
+
+        const int  offset         = idxZ & 3;
+        const bool needThirdBlock = (offset + Order > 2 * GMX_SIMD4_WIDTH);
+
+        Simd4Real fx_S = setZero();
+        Simd4Real fy_S = setZero();
+        Simd4Real fz_S = setZero();
+
+        Simd4Real tz_S0, tz_S1, tz_S2, dz_S0, dz_S1, dz_S2;
+        loadOrderU3(thz, order, offset, &tz_S0, &tz_S1, &tz_S2);
+        loadOrderU3(dthz, order, offset, &dz_S0, &dz_S1, &dz_S2);
+
+        tz_S0 = selectByMask(tz_S0, work.mask_S0[offset]);
+        dz_S0 = selectByMask(dz_S0, work.mask_S0[offset]);
+        tz_S1 = selectByMask(tz_S1, work.mask_S1[offset]);
+        dz_S1 = selectByMask(dz_S1, work.mask_S1[offset]);
+        tz_S2 = selectByMask(tz_S2, work.mask_S2[offset]);
+        dz_S2 = selectByMask(dz_S2, work.mask_S2[offset]);
+
+        for (int ithx = 0; (ithx < order); ithx++)
+        {
+            const int       index_x = (idxX + ithx) * gridNY * gridNZ;
+            const Simd4Real tx_S    = Simd4Real(thx[ithx]);
+            const Simd4Real dx_S    = Simd4Real(dthx[ithx]);
+
+            for (int ithy = 0; (ithy < order); ithy++)
+            {
+                const int         index_xy = index_x + (idxY + ithy) * gridNZ;
+                const Simd4Real   ty_S     = Simd4Real(thy[ithy]);
+                const Simd4Real   dy_S     = Simd4Real(dthy[ithy]);
+                const real* const gridBase = grid_ + index_xy + idxZ - offset;
+
+                const Simd4Real gval_S0 = load4(gridBase);
+                const Simd4Real gval_S1 = load4(gridBase + GMX_SIMD4_WIDTH);
+
+                Simd4Real fxy1_S = tz_S0 * gval_S0 + tz_S1 * gval_S1;
+                Simd4Real fz1_S  = dz_S0 * gval_S0 + dz_S1 * gval_S1;
+
+                if (needThirdBlock)
+                {
+                    const Simd4Real gval_S2 = load4(gridBase + 2 * GMX_SIMD4_WIDTH);
+                    fxy1_S                  = fma(tz_S2, gval_S2, fxy1_S);
+                    fz1_S                   = fma(dz_S2, gval_S2, fz1_S);
+                }
 
                 fx_S = fma(dx_S * ty_S, fxy1_S, fx_S);
                 fy_S = fma(tx_S * dy_S, fxy1_S, fy_S);
@@ -380,6 +494,9 @@ void gather_f_bsplines(const gmx_pme_t&          pme,
             {
                 case 4: f = spline_func(std::integral_constant<int, 4>()); break;
                 case 5: f = spline_func(std::integral_constant<int, 5>()); break;
+                case 6: f = spline_func(std::integral_constant<int, 6>()); break;
+                case 7: f = spline_func(std::integral_constant<int, 7>()); break;
+                case 8: f = spline_func(std::integral_constant<int, 8>()); break;
                 default: f = spline_func(order); break;
             }
 

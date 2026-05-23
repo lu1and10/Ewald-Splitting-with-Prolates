@@ -50,6 +50,9 @@ namespace gmx
 //! Outputs `drho1d_out` sized 3 * P_padded, with padded lanes zero.
 void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> drho1d_out);
 
+//! Whether this build dispatches gather_f_bsplines() to SIMD4 code for \p order.
+bool gather_f_bsplines_has_simd4_specialization(int order);
+
 /*! Gather the forces from the grid
  *
  * \param[in] pme          General PME settings

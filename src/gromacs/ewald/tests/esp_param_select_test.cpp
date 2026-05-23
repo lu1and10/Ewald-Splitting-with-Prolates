@@ -34,12 +34,12 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/ewald/calculate_spline_moduli.h"
 #include "gromacs/ewald/esp_param_select.h"
-#include "gromacs/ewald/pme_load_balancing.h"
 
 #include <gtest/gtest.h>
 
+#include "gromacs/ewald/calculate_spline_moduli.h"
+#include "gromacs/ewald/pme_load_balancing.h"
 #include "gromacs/math/pswf.h"
 #include "gromacs/mdtypes/md_enums.h"
 #include "gromacs/mdtypes/simulation_workload.h"
@@ -74,14 +74,14 @@ double fourierLambdaReference(const Pswf0& psi)
 EspAutotuneInput makeCubicSpcEWaterInput(real eps)
 {
     EspAutotuneInput in{};
-    in.accuracy          = eps;
-    in.spreadAccuracy    = 0.25_real * eps;
-    in.cutoff            = 1.0_real;
-    in.box[XX][XX]       = 2.46_real;
-    in.box[YY][YY]       = 2.46_real;
-    in.box[ZZ][ZZ]       = 2.46_real;
-    in.natoms            = 1500;
-    in.q2sum             = 500.0 * (0.4238 * 0.4238 * 2 + 0.8476 * 0.8476);
+    in.accuracy             = eps;
+    in.spreadAccuracy       = 0.25_real * eps;
+    in.cutoff               = 1.0_real;
+    in.box[XX][XX]          = 2.46_real;
+    in.box[YY][YY]          = 2.46_real;
+    in.box[ZZ][ZZ]          = 2.46_real;
+    in.natoms               = 1500;
+    in.q2sum                = 500.0 * (0.4238 * 0.4238 * 2 + 0.8476 * 0.8476);
     in.stencilOrderOverride = -1;
     return in;
 }
@@ -92,8 +92,8 @@ TEST(EspAutotune, ClosedFormBandlimitMatchesProlc180)
     EspAutotuneInput in  = makeCubicSpcEWaterInput(eps);
     EspParameters    out = autotuneEsp(in, nullLogger);
 
-    EXPECT_NEAR(out.c, prolc180(eps), 1.0_real);
-    EXPECT_NEAR(out.c1, prolc180(0.5_real * 0.25_real * eps), 1.0_real);
+    EXPECT_NEAR(out.c, prolc180(eps), 1e-5_real);
+    EXPECT_NEAR(out.c1, prolc180(in.spreadAccuracy), 1e-5_real);
 }
 
 TEST(EspAutotune, StencilOrderMatchesPaper3Table2)
@@ -127,9 +127,9 @@ TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
 TEST(EspAutotune, TightToleranceUsesPracticalGridSelection)
 {
     EspAutotuneInput in = makeCubicSpcEWaterInput(1e-9_real);
-    in.box[XX][XX] = 1.0_real;
-    in.box[YY][YY] = 1.0_real;
-    in.box[ZZ][ZZ] = 1.0_real;
+    in.box[XX][XX]      = 1.0_real;
+    in.box[YY][YY]      = 1.0_real;
+    in.box[ZZ][ZZ]      = 1.0_real;
 
     EspParameters out = autotuneEsp(in, nullLogger);
     EXPECT_GT(out.nx, 1);
@@ -171,8 +171,8 @@ TEST(EspAutotune, GridRespectsPmeInterpolationMinimum)
 
 TEST(EspAutotune, FatalsOnStencilOrderOverrideAboveMax)
 {
-    EspAutotuneInput in      = makeCubicSpcEWaterInput(1e-4_real);
-    in.stencilOrderOverride  = 17;
+    EspAutotuneInput in     = makeCubicSpcEWaterInput(1e-4_real);
+    in.stencilOrderOverride = 17;
 
     GMX_EXPECT_DEATH_IF_SUPPORTED(autotuneEsp(in, nullLogger), "ESP stencil order");
 }
@@ -238,8 +238,8 @@ TEST(EspAutotune, AllPolynomialTablesPopulated)
 
 TEST(MakePswfModuli, BspModZeroIndexMatchesRawFourierWindowWithGridScale)
 {
-    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
-    EspParameters    esp = autotuneEsp(in, nullLogger);
+    EspAutotuneInput                   in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters                      esp = autotuneEsp(in, nullLogger);
     std::array<std::vector<real>, DIM> bspMod;
 
     make_pswf_moduli(&bspMod, esp, esp.nx, esp.ny, esp.nz);
@@ -247,7 +247,7 @@ TEST(MakePswfModuli, BspModZeroIndexMatchesRawFourierWindowWithGridScale)
     const Pswf0  psi(esp.c1);
     const double rawWindowAtZero = fourierLambdaReference(psi) * psi.eval(0.0);
     const real   gridScale       = static_cast<real>(0.5 * esp.P);
-    const real   expectedZero    = gridScale * gridScale * static_cast<real>(rawWindowAtZero * rawWindowAtZero);
+    const real expectedZero = gridScale * gridScale * static_cast<real>(rawWindowAtZero * rawWindowAtZero);
 
     EXPECT_EQ(bspMod[XX].size(), static_cast<size_t>(esp.nx));
     EXPECT_EQ(bspMod[YY].size(), static_cast<size_t>(esp.ny));
@@ -259,16 +259,15 @@ TEST(MakePswfModuli, BspModZeroIndexMatchesRawFourierWindowWithGridScale)
 
 TEST(MakePswfModuli, SymmetricAroundNyquist)
 {
-    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
-    EspParameters    esp = autotuneEsp(in, nullLogger);
+    EspAutotuneInput                   in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters                      esp = autotuneEsp(in, nullLogger);
     std::array<std::vector<real>, DIM> bspMod;
 
     make_pswf_moduli(&bspMod, esp, esp.nx, esp.ny, esp.nz);
 
     for (int m = 1; m < esp.nx / 2; ++m)
     {
-        EXPECT_NEAR(bspMod[XX][m], bspMod[XX][esp.nx - m], 1e-10_real)
-                << "Symmetry failed at m=" << m;
+        EXPECT_NEAR(bspMod[XX][m], bspMod[XX][esp.nx - m], 1e-10_real) << "Symmetry failed at m=" << m;
     }
 }
 

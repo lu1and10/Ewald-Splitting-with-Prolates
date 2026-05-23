@@ -288,18 +288,16 @@ TEST(EspSolve, TriclinicInfluenceUsesReciprocalBox)
     EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], triclinicAngularInfluenceReference(f, kx, ky, kz), real(1e-6));
 }
 
-TEST(EspSolve, StencilOrderAddsPmeGridScale)
+TEST(EspSolve, StencilOrderOnlyAffectsPrecomputedModuli)
 {
     SolveFixture f;
     f.stencilOrder = 6;
     f.run();
 
-    const int  kx        = 2;
-    const int  ky        = 1;
-    const int  kz        = 0;
-    const real gridScale = real(0.5 * f.stencilOrder);
-    const real expected  = angularInfluenceReference(f, kx, ky, kz) / (gridScale * gridScale);
-    EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], expected, real(1e-6));
+    const int kx = 2;
+    const int ky = 1;
+    const int kz = 0;
+    EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], angularInfluenceReference(f, kx, ky, kz), real(1e-6));
 }
 
 } // namespace

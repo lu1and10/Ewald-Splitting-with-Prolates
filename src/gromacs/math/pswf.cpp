@@ -40,9 +40,10 @@
 
 #include "gromacs/math/pswf.h"
 
+#include <cmath>
+
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <stdexcept>
 #include <vector>
 
@@ -55,9 +56,9 @@ namespace
 
 constexpr double c_pi = 3.141592653589793238462643383279502884;
 
-void buildMatrixCoefficients(double              lambda,
-                             int                 n,
-                             double              c,
+void buildMatrixCoefficients(double               lambda,
+                             int                  n,
+                             double               c,
                              std::vector<double>* lower,
                              std::vector<double>* diagonal,
                              std::vector<double>* upper)
@@ -66,14 +67,11 @@ void buildMatrixCoefficients(double              lambda,
     {
         const double order = static_cast<double>(2 * k);
 
-        const double alpha0 = order * (order - 1.0)
-                              / ((2.0 * order + 1.0) * (2.0 * order - 1.0));
-        const double beta0 =
-                ((order + 1.0) * (order + 1.0) / (2.0 * order + 3.0)
-                 + order * order / (2.0 * order - 1.0))
-                / (2.0 * order + 1.0);
-        const double gamma0 = (order + 1.0) * (order + 2.0)
-                              / ((2.0 * order + 1.0) * (2.0 * order + 3.0));
+        const double alpha0 = order * (order - 1.0) / ((2.0 * order + 1.0) * (2.0 * order - 1.0));
+        const double beta0  = ((order + 1.0) * (order + 1.0) / (2.0 * order + 3.0)
+                              + order * order / (2.0 * order - 1.0))
+                             / (2.0 * order + 1.0);
+        const double gamma0 = (order + 1.0) * (order + 2.0) / ((2.0 * order + 1.0) * (2.0 * order + 3.0));
 
         (*lower)[k]    = -c * c * alpha0;
         (*diagonal)[k] = lambda - order * (order + 1.0) - c * c * beta0;
@@ -126,17 +124,16 @@ void tridiagonalEigenvalues(int n, std::vector<double>* diagonal, std::vector<do
 
             double g = ((*diagonal)[l + 1] - (*diagonal)[l]) / (2.0 * (*offDiagonal)[l]);
             double r = std::hypot(g, 1.0);
-            g = (*diagonal)[m] - (*diagonal)[l]
-                + (*offDiagonal)[l] / (g + std::copysign(r, g));
+            g = (*diagonal)[m] - (*diagonal)[l] + (*offDiagonal)[l] / (g + std::copysign(r, g));
 
             double sine   = 1.0;
             double cosine = 1.0;
             double p      = 0.0;
             for (int i = m - 1; i >= l; --i)
             {
-                const double f = sine * (*offDiagonal)[i];
-                const double b = cosine * (*offDiagonal)[i];
-                r              = std::hypot(f, g);
+                const double f        = sine * (*offDiagonal)[i];
+                const double b        = cosine * (*offDiagonal)[i];
+                r                     = std::hypot(f, g);
                 (*offDiagonal)[i + 1] = r;
                 if (r == 0.0)
                 {
@@ -145,13 +142,13 @@ void tridiagonalEigenvalues(int n, std::vector<double>* diagonal, std::vector<do
                     break;
                 }
 
-                sine             = f / r;
-                cosine           = g / r;
-                g                = (*diagonal)[i + 1] - p;
-                r                = ((*diagonal)[i] - g) * sine + 2.0 * cosine * b;
-                p                = sine * r;
+                sine               = f / r;
+                cosine             = g / r;
+                g                  = (*diagonal)[i + 1] - p;
+                r                  = ((*diagonal)[i] - g) * sine + 2.0 * cosine * b;
+                p                  = sine * r;
                 (*diagonal)[i + 1] = g + p;
-                g                = cosine * r - b;
+                g                  = cosine * r - b;
             }
 
             if (r == 0.0)
@@ -182,8 +179,8 @@ void factorTridiagonal(std::vector<double>*       diagonal,
     {
         const double factor = lower[i + 1] / (*diagonal)[i];
         (*diagonal)[i + 1] -= upper[i] * factor;
-        (*down)[i]              = factor;
-        (*up)[i + 1]            = upper[i] / (*diagonal)[i + 1];
+        (*down)[i]                = factor;
+        (*up)[i + 1]              = upper[i] / (*diagonal)[i + 1];
         (*inverseDiagonal)[i + 1] = 1.0 / (*diagonal)[i + 1];
     }
     (*inverseDiagonal)[0] = 1.0 / (*diagonal)[0];
@@ -258,9 +255,9 @@ void buildLegendreCoefficients(int n, double c, std::vector<double>* coefficient
     coefficients->resize(lastSignificant + 1);
 }
 
-double evaluateRaw(const std::vector<double>&              coefficients,
+double evaluateRaw(const std::vector<double>&                coefficients,
                    const std::vector<std::array<double, 3>>& recurrenceCoefficients,
-                   double                                  x)
+                   double                                    x)
 {
     const double xSquared = x * x;
     double       pjm1     = 0.0;
@@ -273,17 +270,15 @@ double evaluateRaw(const std::vector<double>&              coefficients,
         pjm1 = pjm2 * (xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1])
                - pjm1 * recurrenceCoefficients[i][2];
         value += coefficients[i] * pjm1;
-        pjm2 = pjm1 * (xSquared * recurrenceCoefficients[i + 1][0]
-                       - recurrenceCoefficients[i + 1][1])
+        pjm2 = pjm1 * (xSquared * recurrenceCoefficients[i + 1][0] - recurrenceCoefficients[i + 1][1])
                - pjm2 * recurrenceCoefficients[i + 1][2];
         value += coefficients[i + 1] * pjm2;
     }
 
     for (; i < recurrenceCoefficients.size(); ++i)
     {
-        const double p =
-                pjm2 * (xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1])
-                - pjm1 * recurrenceCoefficients[i][2];
+        const double p = pjm2 * (xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1])
+                         - pjm1 * recurrenceCoefficients[i][2];
         value += coefficients[i] * p;
         pjm1 = pjm2;
         pjm2 = p;
@@ -292,9 +287,9 @@ double evaluateRaw(const std::vector<double>&              coefficients,
     return value;
 }
 
-double evaluateRawDerivative(const std::vector<double>&              coefficients,
+double evaluateRawDerivative(const std::vector<double>&                coefficients,
                              const std::vector<std::array<double, 3>>& recurrenceCoefficients,
-                             double                                  x)
+                             double                                    x)
 {
     const double xSquared = x * x;
     double       pjm1     = 0.0;
@@ -306,10 +301,10 @@ double evaluateRawDerivative(const std::vector<double>&              coefficient
     std::size_t i = 1;
     for (; i < recurrenceCoefficients.size(); ++i)
     {
-        const double a     = xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1];
-        const double dA    = 2.0 * x * recurrenceCoefficients[i][0];
-        const double p     = pjm2 * a - pjm1 * recurrenceCoefficients[i][2];
-        const double dP    = dPjm2 * a + pjm2 * dA - dPjm1 * recurrenceCoefficients[i][2];
+        const double a  = xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1];
+        const double dA = 2.0 * x * recurrenceCoefficients[i][0];
+        const double p  = pjm2 * a - pjm1 * recurrenceCoefficients[i][2];
+        const double dP = dPjm2 * a + pjm2 * dA - dPjm1 * recurrenceCoefficients[i][2];
         dValue += coefficients[i] * dP;
         pjm1  = pjm2;
         pjm2  = p;
@@ -345,9 +340,9 @@ constexpr std::array<GLNode, 16> c_gaussLegendreNodes16 = { {
         { 0.989400934991649932, 0.027152459411754095 },
 } };
 
-double integrateNormalizedPswf(const std::vector<double>&              coefficients,
+double integrateNormalizedPswf(const std::vector<double>&                coefficients,
                                const std::vector<std::array<double, 3>>& recurrenceCoefficients,
-                               double                                  normalizationAt0)
+                               double                                    normalizationAt0)
 {
     constexpr int    kIntervals = 2048;
     constexpr double kLower     = -1.0;
@@ -400,8 +395,7 @@ std::vector<double> chebSamplesToMonomial(const std::vector<double>& fSamples)
         for (int j = 0; j < n; ++j)
         {
             chebToMonomial[k][j] =
-                    2.0 * (j > 0 ? chebToMonomial[k - 1][j - 1] : 0.0)
-                    - chebToMonomial[k - 2][j];
+                    2.0 * (j > 0 ? chebToMonomial[k - 1][j - 1] : 0.0) - chebToMonomial[k - 2][j];
         }
     }
 
@@ -427,9 +421,7 @@ int truncateToTol(std::vector<double>* monomial, double tol)
     return order;
 }
 
-std::vector<double> composeMonomialWithAffine(const std::vector<double>& monomial,
-                                              double                     a,
-                                              double                     b)
+std::vector<double> composeMonomialWithAffine(const std::vector<double>& monomial, double a, double b)
 {
     std::vector<double> composed(monomial.size(), 0.0);
     for (int degree = 0; degree < static_cast<int>(monomial.size()); ++degree)
@@ -475,13 +467,13 @@ double fourierLambda(const Pswf0& psi)
 }
 
 template<typename Function>
-void fitScalarOnInterval(double              lower,
-                         double              upper,
-                         int                 order,
-                         double              tol,
-                         const Function&     function,
-                         AlignedRealVector*  coefs,
-                         int*                polyOrderOut)
+void fitScalarOnInterval(double             lower,
+                         double             upper,
+                         int                order,
+                         double             tol,
+                         const Function&    function,
+                         AlignedRealVector* coefs,
+                         int*               polyOrderOut)
 {
     const std::vector<double> nodes = chebNodes(order);
     const double              half  = 0.5 * (upper - lower);
@@ -495,7 +487,7 @@ void fitScalarOnInterval(double              lower,
 
     std::vector<double> monomialInT = chebSamplesToMonomial(samples);
     std::vector<double> monomialInX = composeMonomialWithAffine(monomialInT, 1.0 / half, -mid / half);
-    const int           trimmedOrder = truncateToTol(&monomialInX, tol);
+    const int trimmedOrder = truncateToTol(&monomialInX, tol);
 
     coefs->assign(trimmedOrder, 0.0);
     for (int j = 0; j < trimmedOrder; ++j)
@@ -511,7 +503,8 @@ struct Prolc180Calibration
 
     static const Prolc180Calibration& instance()
     {
-        static const Prolc180Calibration instance = [] {
+        static const Prolc180Calibration instance = []
+        {
             constexpr std::array<double, 4> calibrationC = { 5.0, 10.0, 15.0, 20.0 };
             double                          logKSum      = 0.0;
             for (double c : calibrationC)
@@ -539,15 +532,13 @@ Pswf0::Pswf0(double c) : c_(c), lambda0_(0.0), normalizationAt0_(1.0)
         throw std::invalid_argument("Pswf0: c must be in (0, 30]");
     }
 
-    static constexpr std::array<int, 20> cToExpansionOrder = { 48,  64,  80,  92,  106,
-                                                               120, 130, 144, 156, 168,
-                                                               178, 190, 202, 214, 224,
-                                                               236, 248, 258, 268, 280 };
+    static constexpr std::array<int, 20> cToExpansionOrder = { 48,  64,  80,  92,  106, 120, 130,
+                                                               144, 156, 168, 178, 190, 202, 214,
+                                                               224, 236, 248, 258, 268, 280 };
 
     const int cBucket = static_cast<int>(c / 10.0);
-    const int n       = (cBucket < static_cast<int>(cToExpansionOrder.size()))
-                              ? cToExpansionOrder[cBucket]
-                              : static_cast<int>(c * 1.5);
+    const int n = (cBucket < static_cast<int>(cToExpansionOrder.size())) ? cToExpansionOrder[cBucket]
+                                                                         : static_cast<int>(c * 1.5);
 
     buildLegendreCoefficients(n, c, &legendreCoefficients_);
 
@@ -555,15 +546,12 @@ Pswf0::Pswf0(double c) : c_(c), lambda0_(0.0), normalizationAt0_(1.0)
     for (std::size_t i = 1; i < recurrenceCoefficients_.size(); ++i)
     {
         const double ell = 2.0 * i - 1.0;
-        recurrenceCoefficients_[i][0] =
-                ((2.0 * ell - 1.0) * (2.0 * ell + 1.0)) / (ell * (ell + 1.0));
+        recurrenceCoefficients_[i][0] = ((2.0 * ell - 1.0) * (2.0 * ell + 1.0)) / (ell * (ell + 1.0));
         recurrenceCoefficients_[i][1] =
-                ((2.0 * ell + 1.0) * (ell - 1.0) * (ell - 1.0)
-                 + ell * ell * (2.0 * ell - 3.0))
+                ((2.0 * ell + 1.0) * (ell - 1.0) * (ell - 1.0) + ell * ell * (2.0 * ell - 3.0))
                 / (ell * (ell + 1.0) * (2.0 * ell - 3.0));
-        recurrenceCoefficients_[i][2] =
-                ((2.0 * ell + 1.0) * (ell - 1.0) * (ell - 2.0))
-                / (ell * (ell + 1.0) * (2.0 * ell - 3.0));
+        recurrenceCoefficients_[i][2] = ((2.0 * ell + 1.0) * (ell - 1.0) * (ell - 2.0))
+                                        / (ell * (ell + 1.0) * (2.0 * ell - 3.0));
     }
 
     normalizationAt0_ = 1.0 / evaluateRaw(legendreCoefficients_, recurrenceCoefficients_, 0.0);
@@ -618,8 +606,7 @@ double prolc180(double tolerance)
     }
 
     const double k = Prolc180Calibration::instance().K;
-    double       c = std::log(1.0 / tolerance)
-               + 0.5 * std::log(std::log(1.0 / tolerance) + 1.0);
+    double       c = std::log(1.0 / tolerance) + 0.5 * std::log(std::log(1.0 / tolerance) + 1.0);
 
     for (int iter = 0; iter < 50; ++iter)
     {
@@ -671,7 +658,7 @@ int estimateOrder(double tolerance)
         throw std::invalid_argument("estimateOrder: tolerance must be in (0, 1)");
     }
 
-    const double p      = -std::log10(tolerance);
+    const double p       = -std::log10(tolerance);
     const double rounded = std::round(p);
     int          order   = 0;
 
@@ -684,18 +671,12 @@ int estimateOrder(double tolerance)
         order = 2 * static_cast<int>(std::ceil(p)) - 3;
     }
 
-    order           = std::max(order, 4);
-    order           = std::min(order, 16);
+    order = std::max(order, 4);
+    order = std::min(order, 16);
     return order;
 }
 
-void spreadRealPoly(int P,
-                    int P_padded,
-                    double tol,
-                    double r_tol,
-                    double c_w,
-                    AlignedRealVector* coefs,
-                    int*               polyOrderOut)
+void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, AlignedRealVector* coefs, int* polyOrderOut)
 {
     (void)r_tol;
     GMX_ASSERT(P > 0 && P_padded >= P, "spreadRealPoly: invalid P or P_padded");
@@ -703,29 +684,29 @@ void spreadRealPoly(int P,
 
     const Pswf0 psi(c_w);
 
-    constexpr int                  kInitialOrder = 24;
+    constexpr int                    kInitialOrder = 24;
     std::vector<std::vector<double>> perStencilCoefficients(P);
-    int                            globalPolyOrder = 0;
-    const std::vector<double>      chebNodesInT    = chebNodes(kInitialOrder);
+    int                              globalPolyOrder = 0;
+    const std::vector<double>        chebNodesInT    = chebNodes(kInitialOrder);
 
     for (int k = 0; k < P; ++k)
     {
         std::vector<double> samples(kInitialOrder);
         for (int i = 0; i < kInitialOrder; ++i)
         {
-            const double t  = chebNodesInT[i];
-            const double x  = 0.5 * (t + 1.0);
+            const double t             = chebNodesInT[i];
+            const double x             = 0.5 * (t + 1.0);
             const int    tkmBasisIndex = P - k - 1;
-            const double s = (x - 0.5 * static_cast<double>(P) + tkmBasisIndex)
+            const double s             = (x - 0.5 * static_cast<double>(P) + tkmBasisIndex)
                              / (0.5 * static_cast<double>(P));
-            samples[i]      = psi.eval(s);
+            samples[i] = psi.eval(s);
         }
 
         std::vector<double> monomialInT = chebSamplesToMonomial(samples);
         std::vector<double> monomial    = composeMonomialWithAffine(monomialInT, 2.0, -1.0);
-        const int           order    = truncateToTol(&monomial, tol);
-        globalPolyOrder              = std::max(globalPolyOrder, order);
-        perStencilCoefficients[k]    = std::move(monomial);
+        const int           order       = truncateToTol(&monomial, tol);
+        globalPolyOrder                 = std::max(globalPolyOrder, order);
+        perStencilCoefficients[k]       = std::move(monomial);
     }
 
     coefs->assign(static_cast<std::size_t>(globalPolyOrder) * P_padded, 0.0);
@@ -739,11 +720,7 @@ void spreadRealPoly(int P,
     *polyOrderOut = globalPolyOrder;
 }
 
-void spreadFourierPoly(double tol,
-                       double r_tol,
-                       double c_w,
-                       AlignedRealVector* coefs,
-                       int*               polyOrderOut)
+void spreadFourierPoly(double tol, double r_tol, double c_w, AlignedRealVector* coefs, int* polyOrderOut)
 {
     (void)r_tol;
     GMX_ASSERT(c_w > 0.0, "spreadFourierPoly: c_w must be positive");
@@ -752,7 +729,7 @@ void spreadFourierPoly(double tol,
     const double lambda = fourierLambda(psi);
 
     constexpr int             kInitialOrder = 32;
-    const std::vector<double> nodes          = chebNodes(kInitialOrder);
+    const std::vector<double> nodes         = chebNodes(kInitialOrder);
     std::vector<double>       samples(kInitialOrder);
     for (int i = 0; i < kInitialOrder; ++i)
     {
@@ -762,7 +739,7 @@ void spreadFourierPoly(double tol,
 
     std::vector<double> monomialInT = chebSamplesToMonomial(samples);
     std::vector<double> monomial    = composeMonomialWithAffine(monomialInT, 2.0, -1.0);
-    const int           order    = truncateToTol(&monomial, tol);
+    const int           order       = truncateToTol(&monomial, tol);
 
     coefs->assign(order, 0.0);
     for (int j = 0; j < order; ++j)
@@ -779,13 +756,8 @@ void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* 
     GMX_ASSERT(c > 0.0, "shortRangeForcePoly: c must be positive");
 
     const Pswf0 psi(c);
-    fitScalarOnInterval(0.0,
-                        1.0,
-                        16,
-                        0.0,
-                        [&](double s) { return longRangeForceCorrectionScalar(psi, s); },
-                        coefs,
-                        polyOrderOut);
+    fitScalarOnInterval(
+            0.0, 1.0, 16, 0.0, [&](double s) { return longRangeForceCorrectionScalar(psi, s); }, coefs, polyOrderOut);
 }
 
 void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
@@ -795,13 +767,8 @@ void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector*
     GMX_ASSERT(c > 0.0, "shortRangeEnergyPoly: c must be positive");
 
     const Pswf0 psi(c);
-    fitScalarOnInterval(0.0,
-                        1.0,
-                        16,
-                        0.0,
-                        [&](double s) { return longRangeEnergyCorrectionScalar(psi, s); },
-                        coefs,
-                        polyOrderOut);
+    fitScalarOnInterval(
+            0.0, 1.0, 16, 0.0, [&](double s) { return longRangeEnergyCorrectionScalar(psi, s); }, coefs, polyOrderOut);
 }
 
 void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
@@ -811,25 +778,24 @@ void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coe
 
     const Pswf0  psi(c);
     const double c0    = psi.evalIntegral(1.0);
-    const double scale = 0.5 * fourierLambda(psi) / c0;
+    const double scale = fourierLambda(psi) / c0;
 
     constexpr int             kOrder = 32;
     const std::vector<double> nodes  = chebNodes(kOrder);
     std::vector<double>       samples(kOrder);
     for (int i = 0; i < kOrder; ++i)
     {
-        const double arg = 0.5 * c * (nodes[i] + 1.0);
-        samples[i]       = scale * psi.eval(arg / c);
+        const double normalizedArg = 0.5 * (nodes[i] + 1.0);
+        samples[i]                 = scale * psi.eval(normalizedArg);
     }
 
-    std::vector<double> monomialInT   = chebSamplesToMonomial(samples);
-    std::vector<double> monomialInArg = composeMonomialWithAffine(monomialInT, 2.0 / c, -1.0);
-    const int           order         = truncateToTol(&monomialInArg, tol);
+    std::vector<double> monomial = chebSamplesToMonomial(samples);
+    const int           order    = truncateToTol(&monomial, tol);
 
     coefs->assign(order, 0.0);
     for (int j = 0; j < order; ++j)
     {
-        (*coefs)[j] = static_cast<real>(monomialInArg[j]);
+        (*coefs)[j] = static_cast<real>(monomial[j]);
     }
     *polyOrderOut = order;
 }

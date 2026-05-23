@@ -36,13 +36,15 @@
 
 #include "gromacs/math/pswf.h"
 
-#include <algorithm>
+#include <tinyxml2.h>
+
 #include <cmath>
+
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
 #include <gtest/gtest.h>
-#include <tinyxml2.h>
 
 #include "testutils/testfilemanager.h"
 
@@ -86,7 +88,21 @@ double spreadFourierReference(const Pswf0& psi, double s)
 double splitFourierReference(const Pswf0& psi, double arg)
 {
     const double c0 = psi.evalIntegral(1.0);
-    return 0.5 * fourierLambdaReference(psi) * psi.eval(arg / psi.c()) / c0;
+    return fourierLambdaReference(psi) * psi.eval(arg / psi.c()) / c0;
+}
+
+double splitFourierPolynomialValue(const AlignedRealVector& coefs,
+                                   const int                polyOrder,
+                                   const double             arg,
+                                   const double             bandlimit)
+{
+    const double x     = 2.0 * arg / bandlimit - 1.0;
+    double       value = coefs[polyOrder - 1];
+    for (int l = polyOrder - 2; l >= 0; --l)
+    {
+        value = value * x + coefs[l];
+    }
+    return value;
 }
 
 TEST(Pswf0, ConstructionRangeChecks)
@@ -135,7 +151,7 @@ TEST(Pswf0, MatchesMpmathRefdataAt50Digits)
 
         Pswf0 psi(c);
         for (const auto* sample = cNode->FirstChildElement("Sample"); sample != nullptr;
-             sample            = sample->NextSiblingElement("Sample"))
+             sample             = sample->NextSiblingElement("Sample"))
         {
             double x = 0.0;
             ASSERT_EQ(sample->QueryDoubleAttribute("x", &x), tinyxml2::XML_SUCCESS);
@@ -239,7 +255,7 @@ TEST(EstimateOrder, MatchesLammpsIntermediateToleranceHeuristic)
 
 TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
 {
-    constexpr int    p      = 6;
+    constexpr int    p       = 6;
     constexpr int    pPadded = 8;
     constexpr double cWindow = 12.024;
 
@@ -256,7 +272,7 @@ TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
         for (double x : { 0.05, 0.25, 0.5, 0.75, 0.95 })
         {
             const int    tkmBasisIndex = p - k - 1;
-            const double s = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
+            const double s             = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
                              / (0.5 * static_cast<double>(p));
             const double ref = psi.eval(s);
 
@@ -283,8 +299,7 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
     {
         for (int k = p; k < pPadded; ++k)
         {
-            EXPECT_EQ(coefs[l * pPadded + k], 0.0)
-                    << "l=" << l << " k=" << k;
+            EXPECT_EQ(coefs[l * pPadded + k], 0.0) << "l=" << l << " k=" << k;
         }
     }
 }
@@ -330,12 +345,40 @@ TEST(SplitFourierPoly, MatchesChiHatAt05)
     const double arg = 0.5;
     const double ref = splitFourierReference(psi, arg);
 
-    double poly = coefs[polyOrder - 1];
-    for (int l = polyOrder - 2; l >= 0; --l)
-    {
-        poly = poly * arg + coefs[l];
-    }
+    const double poly = splitFourierPolynomialValue(coefs, polyOrder, arg, psi.c());
     EXPECT_NEAR(poly, ref, 1e-5);
+}
+
+TEST(SplitFourierPoly, MatchesLammpsFourierKernelConvention)
+{
+    constexpr double  c = 12.024;
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    splitFourierPoly(1e-5, 1e-6, c, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0        psi(c);
+    const double arg = 0.3 * c;
+    const double ref = splitFourierReference(psi, arg);
+
+    const double poly = splitFourierPolynomialValue(coefs, polyOrder, arg, c);
+    EXPECT_NEAR(poly, ref, 1e-5);
+}
+
+TEST(SplitFourierPoly, MatchesChiHatNearBandlimit)
+{
+    constexpr double  c = 12.024;
+    AlignedRealVector coefs;
+    int               polyOrder = 0;
+    splitFourierPoly(1e-5, 1e-6, c, &coefs, &polyOrder);
+    ASSERT_GT(polyOrder, 0);
+
+    Pswf0        psi(c);
+    const double arg = 0.9 * c;
+    const double ref = splitFourierReference(psi, arg);
+
+    const double poly = splitFourierPolynomialValue(coefs, polyOrder, arg, c);
+    EXPECT_NEAR(poly, ref, 1e-3);
 }
 
 TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)

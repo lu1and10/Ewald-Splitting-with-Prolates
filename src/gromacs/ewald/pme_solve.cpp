@@ -366,15 +366,14 @@ void calc_exponentials_pswf(const int                  nx,
     real* const gmx_restrict       chiScratch      = scratchChi.data();
     real* const gmx_restrict       pkScratch       = scratchPk.data();
 
-    const int  kxBegin               = localOffset[XX];
-    const int  kxEnd                 = localOffset[XX] + localNData[XX];
-    const int  kyBegin               = localOffset[YY];
-    const int  kzBegin               = localOffset[ZZ];
-    const real twoPi                 = real(2.0 * M_PI);
-    const real twoPiSquared          = twoPi * twoPi;
-    const real solveGridScale        = real(0.5) * real(stencilOrder);
-    const real solveGridScaleSquared = solveGridScale * solveGridScale;
-    const real influencePrefactor    = twoPi / (boxVolume * solveGridScaleSquared);
+    const int  kxBegin            = localOffset[XX];
+    const int  kxEnd              = localOffset[XX] + localNData[XX];
+    const int  kyBegin            = localOffset[YY];
+    const int  kzBegin            = localOffset[ZZ];
+    const real twoPi              = real(2.0 * M_PI);
+    const real twoPiSquared       = twoPi * twoPi;
+    const real twoInvBandlimit    = real(2) / bandlimit;
+    const real influencePrefactor = twoPi / boxVolume;
 
     for (int iz = 0; iz < localNData[ZZ]; ++iz)
     {
@@ -432,17 +431,22 @@ void calc_exponentials_pswf(const int                  nx,
 #if defined PME_SIMD_SOLVE
             const SimdReal cutoffSimd(cutoff);
             const SimdReal bandlimitSimd(bandlimit);
+            const SimdReal twoInvBandlimitSimd(twoInvBandlimit);
             const SimdReal influencePrefactorSimd(influencePrefactor);
             const SimdReal bspYZSimd(bspYZ);
+            const SimdReal minusOneSimd(real(-1));
+            const SimdReal oneSimd(real(1));
             const SimdReal zeroSimd(real(0));
             for (; lx + GMX_SIMD_REAL_WIDTH <= localNData[XX]; lx += GMX_SIMD_REAL_WIDTH)
             {
                 const SimdReal qSquared = loadU<SimdReal>(&qSquaredScratch[lx]);
                 const SimdReal arg      = cutoffSimd * sqrt(qSquared);
-                SimdReal       chiHat(splitPoly[splitPolyOrder - 1]);
+                const SimdReal normalizedArg =
+                        min(max(arg * twoInvBandlimitSimd - oneSimd, minusOneSimd), oneSimd);
+                SimdReal chiHat(splitPoly[splitPolyOrder - 1]);
                 for (int j = splitPolyOrder - 2; j >= 0; --j)
                 {
-                    chiHat = fma(chiHat, arg, SimdReal(splitPoly[j]));
+                    chiHat = fma(chiHat, normalizedArg, SimdReal(splitPoly[j]));
                 }
 
                 const SimdReal bspTotal = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
@@ -458,11 +462,12 @@ void calc_exponentials_pswf(const int                  nx,
             {
                 const real qSquared = qSquaredScratch[lx];
                 const real arg      = cutoff * std::sqrt(qSquared);
-                real       chiHat   = evaluatePolynomial(splitFourierPoly, splitPolyOrder, arg);
+                real       chiHat   = real(0);
 
-                if (arg > bandlimit)
+                if (arg <= bandlimit)
                 {
-                    chiHat = real(0);
+                    const real normalizedArg = arg * twoInvBandlimit - real(1);
+                    chiHat = evaluatePolynomial(splitFourierPoly, splitPolyOrder, normalizedArg);
                 }
 
                 const real denom = bspXScratch[lx] * bspYZ * qSquared;

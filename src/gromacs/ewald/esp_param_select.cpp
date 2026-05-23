@@ -36,8 +36,9 @@
 
 #include "gromacs/ewald/esp_param_select.h"
 
-#include <algorithm>
 #include <cmath>
+
+#include <algorithm>
 #include <exception>
 
 #include "gromacs/fft/calcgrid.h"
@@ -64,8 +65,7 @@ void checkAutotuneInput(const EspAutotuneInput& in)
                   "ESP autotune accuracy must be finite and in (0, 1), got %g",
                   static_cast<double>(in.accuracy));
     }
-    if (!std::isfinite(in.spreadAccuracy) || in.spreadAccuracy <= 0.0_real
-        || in.spreadAccuracy >= 1.0_real)
+    if (!std::isfinite(in.spreadAccuracy) || in.spreadAccuracy <= 0.0_real || in.spreadAccuracy >= 1.0_real)
     {
         gmx_fatal(FARGS,
                   "ESP autotune spread accuracy must be finite and in (0, 1), got %g",
@@ -82,8 +82,7 @@ void checkAutotuneInput(const EspAutotuneInput& in)
         gmx_fatal(FARGS, "ESP autotune q2sum must be finite and positive, got %g", in.q2sum);
     }
     if (in.stencilOrderOverride > 0
-        && (in.stencilOrderOverride < c_minEspStencilOrder
-            || in.stencilOrderOverride > c_maxEspStencilOrder))
+        && (in.stencilOrderOverride < c_minEspStencilOrder || in.stencilOrderOverride > c_maxEspStencilOrder))
     {
         gmx_fatal(FARGS,
                   "ESP stencil order must be in [%d, %d] if explicitly set, got %d",
@@ -115,11 +114,9 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     EspParameters out;
 
     out.c  = static_cast<real>(checkedProlc180(static_cast<double>(in.accuracy), "split c"));
-    out.c1 = static_cast<real>(
-            checkedProlc180(0.5 * static_cast<double>(in.spreadAccuracy), "spread c"));
-    out.P  = (in.stencilOrderOverride > 0)
-                     ? in.stencilOrderOverride
-                     : estimateOrder(static_cast<double>(in.accuracy));
+    out.c1 = static_cast<real>(checkedProlc180(static_cast<double>(in.spreadAccuracy), "spread c"));
+    out.P  = (in.stencilOrderOverride > 0) ? in.stencilOrderOverride
+                                           : estimateOrder(static_cast<double>(in.accuracy));
     if (out.P < c_minEspStencilOrder || out.P > c_maxEspStencilOrder)
     {
         gmx_fatal(FARGS,
@@ -165,8 +162,7 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
         const real scale = static_cast<real>(l + 1);
         for (int k = 0; k < out.P_padded; ++k)
         {
-            out.drho_coeff[l * out.P_padded + k] =
-                    scale * out.rho_coeff[(l + 1) * out.P_padded + k];
+            out.drho_coeff[l * out.P_padded + k] = scale * out.rho_coeff[(l + 1) * out.P_padded + k];
         }
     }
 

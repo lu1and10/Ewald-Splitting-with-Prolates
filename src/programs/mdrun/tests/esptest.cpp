@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,7 @@
 
 #include "gromacs/trajectory/energyframe.h"
 #include "gromacs/trajectory/trajectoryframe.h"
+#include "gromacs/utility/gmxassert.h"
 #include "gromacs/utility/stringutil.h"
 #include "gromacs/utility/textwriter.h"
 #include "gromacs/utility/vec.h"
@@ -91,7 +93,8 @@ std::string makeEspMdp(const double accuracy, const int nsteps, const int nstfou
 std::string makePmeMdp(const int    nsteps,
                        const int    nstfout,
                        const double fourierSpacing = 0.12,
-                       const int    pmeOrder       = 4)
+                       const int    pmeOrder       = 4,
+                       const double ewaldRtol      = 1.0e-8)
 {
     return formatString(
             "integrator               = md\n"
@@ -107,6 +110,7 @@ std::string makePmeMdp(const int    nsteps,
             "rvdw                     = 0.8\n"
             "fourierspacing           = %.8g\n"
             "pme-order                = %d\n"
+            "ewald-rtol               = %.8g\n"
             "pbc                      = xyz\n"
             "pcoupl                   = no\n"
             "tcoupl                   = no\n"
@@ -123,7 +127,14 @@ std::string makePmeMdp(const int    nsteps,
             nsteps,
             fourierSpacing,
             pmeOrder,
+            ewaldRtol,
             nstfout);
+}
+
+TEST(EspMdpGeneration, HighAccuracyPmeSetsEwaldRtol)
+{
+    const std::string mdp = makePmeMdp(1, 1, 0.04, 6);
+    EXPECT_NE(mdp.find("ewald-rtol               = 1e-08"), std::string::npos);
 }
 
 CommandLine makeCpuMdrunCommandLine()
@@ -157,12 +168,39 @@ protected:
         runner->mtxFileName_ = fileManager_.getTemporaryFilePath(label + ".mtx").string();
     }
 
-    RunOutput runSpcWaterSystem(const std::string& label, const std::string& mdpContents)
+    std::string makeTriclinicSpcWaterGro(const std::string& label)
+    {
+        const std::string inputFileName = TestFileManager::getInputFilePath("spc216.gro").string();
+        std::ifstream     inputFile(inputFileName);
+        std::vector<std::string> lines;
+        std::string              line;
+        while (std::getline(inputFile, line))
+        {
+            lines.push_back(line);
+        }
+        GMX_RELEASE_ASSERT(!lines.empty(), "SPC/E water input file should not be empty");
+        lines.back() =
+                "   1.86206   1.86206   1.86206   0.00000   0.00000   0.12000   0.00000   0.05000  "
+                " 0.08000";
+
+        const std::string outputFileName = fileManager_.getTemporaryFilePath(label + ".gro").string();
+        std::ofstream outputFile(outputFileName);
+        for (const std::string& outputLine : lines)
+        {
+            outputFile << outputLine << '\n';
+        }
+        return outputFileName;
+    }
+
+    RunOutput runSpcWaterSystem(const std::string& label,
+                                const std::string& mdpContents,
+                                const bool         triclinicBox = false)
     {
         SimulationRunner runner(&fileManager_);
         setUniqueOutputFileNames(&runner, label);
         runner.topFileName_ = fileManager_.getTemporaryFilePath(label + "-esp-spc216.top").string();
-        runner.groFileName_ = TestFileManager::getInputFilePath("spc216.gro").string();
+        runner.groFileName_ = triclinicBox ? makeTriclinicSpcWaterGro(label + "-spc216-triclinic")
+                                           : TestFileManager::getInputFilePath("spc216.gro").string();
         runner.useStringAsMdpFile(mdpContents);
 
         TextWriter::writeFileFromString(runner.topFileName_,
@@ -238,51 +276,64 @@ protected:
         return { runner.fullPrecisionTrajectoryFileName_, runner.edrFileName_ };
     }
 
-    RunOutput runInlineIonSystem(const std::string& mdpContents, const bool triclinicBox = false)
+    RunOutput runInlineIonSystem(const std::string& mdpContents,
+                                 const bool         triclinicBox = false,
+                                 const std::string& label        = "esp-ions",
+                                 const bool         neutral      = false)
     {
         SimulationRunner runner(&fileManager_);
-        runner.topFileName_ = fileManager_.getTemporaryFilePath("esp-ions.top").string();
-        runner.groFileName_ = fileManager_.getTemporaryFilePath("esp-ions.gro").string();
+        setUniqueOutputFileNames(&runner, label);
+        runner.topFileName_ = fileManager_.getTemporaryFilePath(label + ".top").string();
+        runner.groFileName_ = fileManager_.getTemporaryFilePath(label + ".gro").string();
         runner.useStringAsMdpFile(mdpContents);
         runner.setMaxWarn(1);
 
-        TextWriter::writeFileFromString(runner.topFileName_,
-                                        "[ defaults ]\n"
-                                        "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
-                                        "1 2 yes 0.5 0.5\n"
-                                        "\n"
-                                        "[ atomtypes ]\n"
-                                        "; name at.num mass charge ptype sigma epsilon\n"
-                                        "NA 11 22.9898 0.0 A 0.257 0.1\n"
-                                        "CL 17 35.4500 0.0 A 0.440 0.1\n"
-                                        "\n"
-                                        "[ moleculetype ]\n"
-                                        "NA 1\n"
-                                        "\n"
-                                        "[ atoms ]\n"
-                                        "1 NA 1 NA NA 1 1.0 22.9898\n"
-                                        "\n"
-                                        "[ moleculetype ]\n"
-                                        "CL 1\n"
-                                        "\n"
-                                        "[ atoms ]\n"
-                                        "1 CL 1 CL CL 1 -1.0 35.45\n"
-                                        "\n"
-                                        "[ system ]\n"
-                                        "ESP non-neutral ion smoke\n"
-                                        "\n"
-                                        "[ molecules ]\n"
-                                        "NA 2\n"
-                                        "CL 1\n");
+        const int sodiumCount = neutral ? 1 : 2;
+        const int atomCount   = sodiumCount + 1;
+
+        TextWriter::writeFileFromString(
+                runner.topFileName_,
+                formatString("[ defaults ]\n"
+                             "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
+                             "1 2 yes 0.5 0.5\n"
+                             "\n"
+                             "[ atomtypes ]\n"
+                             "; name at.num mass charge ptype sigma epsilon\n"
+                             "NA 11 22.9898 0.0 A 0.257 0.1\n"
+                             "CL 17 35.4500 0.0 A 0.440 0.1\n"
+                             "\n"
+                             "[ moleculetype ]\n"
+                             "NA 1\n"
+                             "\n"
+                             "[ atoms ]\n"
+                             "1 NA 1 NA NA 1 1.0 22.9898\n"
+                             "\n"
+                             "[ moleculetype ]\n"
+                             "CL 1\n"
+                             "\n"
+                             "[ atoms ]\n"
+                             "1 CL 1 CL CL 1 -1.0 35.45\n"
+                             "\n"
+                             "[ system ]\n"
+                             "ESP ion test\n"
+                             "\n"
+                             "[ molecules ]\n"
+                             "NA %d\n"
+                             "CL 1\n",
+                             sodiumCount));
 
         TextWriter::writeFileFromString(
                 runner.groFileName_,
-                formatString("ESP non-neutral ion smoke\n"
-                             "3\n"
+                formatString("ESP ion test\n"
+                             "%d\n"
                              "    1NA      NA    1   0.500   0.500   0.500\n"
-                             "    2NA      NA    2   1.500   1.500   1.500\n"
-                             "    3CL      CL    3   2.500   2.500   2.500\n"
+                             "%s"
+                             "%5dCL      CL%5d   2.500   2.500   2.500\n"
                              "%s",
+                             atomCount,
+                             neutral ? "" : "    2NA      NA    2   1.500   1.500   1.500\n",
+                             atomCount,
+                             atomCount,
                              triclinicBox ? "   3.00000   3.10000   3.20000   0.00000   0.00000   "
                                             "0.20000   0.00000   0.10000   0.15000\n"
                                           : "   3.00000   3.00000   3.00000\n"));
@@ -391,7 +442,7 @@ TEST_F(EspIntegrationTest, SpcEWater_ForceAndEnergyErrorVsHighAccuracyPme)
 
     const double delta = relativeL2ForceError(testForces, refForces);
     EXPECT_TRUE(std::isfinite(delta));
-    EXPECT_LT(delta, 0.1) << "force delta=" << delta;
+    EXPECT_LT(delta, 1.0e-4) << "force delta=" << delta;
 
     const real   refEnergy   = readLastElectrostaticEnergy(reference.energyFileName);
     const real   testEnergy  = readLastElectrostaticEnergy(test.energyFileName);
@@ -399,8 +450,8 @@ TEST_F(EspIntegrationTest, SpcEWater_ForceAndEnergyErrorVsHighAccuracyPme)
     EXPECT_TRUE(std::isfinite(refEnergy));
     EXPECT_TRUE(std::isfinite(testEnergy));
     EXPECT_TRUE(std::isfinite(energyDelta));
-    EXPECT_LT(energyDelta, 0.1) << "energy delta=" << energyDelta << " reference=" << refEnergy
-                                << " test=" << testEnergy;
+    EXPECT_LT(energyDelta, 1.0e-4) << "energy delta=" << energyDelta << " reference=" << refEnergy
+                                   << " test=" << testEnergy;
 }
 
 TEST_F(EspIntegrationTest, SpcEWater_AgreementWithPme)
@@ -434,6 +485,31 @@ TEST_F(EspIntegrationTest, NaClTriclinic_SingleStepSmoke)
     const std::vector<RVec> forces = readLastForces(output.trajectoryFileName);
     ASSERT_EQ(forces.size(), 3U);
     expectFiniteForces(forces);
+}
+
+TEST_F(EspIntegrationTest, SpcEWaterTriclinic_ForceAndEnergyErrorVsHighAccuracyPme)
+{
+    const RunOutput reference =
+            runSpcWaterSystem("spce-triclinic-high-accuracy-pme", makePmeMdp(1, 1, 0.04, 6), true);
+    const RunOutput test = runSpcWaterSystem("spce-triclinic-esp", makeEspMdp(1.0e-4, 1, 1, -1), true);
+
+    const std::vector<RVec> refForces  = readLastForces(reference.trajectoryFileName);
+    const std::vector<RVec> testForces = readLastForces(test.trajectoryFileName);
+    expectFiniteForces(refForces);
+    expectFiniteForces(testForces);
+
+    const double forceDelta = relativeL2ForceError(testForces, refForces);
+    EXPECT_TRUE(std::isfinite(forceDelta));
+    EXPECT_LT(forceDelta, 1.0e-4) << "force delta=" << forceDelta;
+
+    const real   refEnergy   = readLastElectrostaticEnergy(reference.energyFileName);
+    const real   testEnergy  = readLastElectrostaticEnergy(test.energyFileName);
+    const double energyDelta = relativeScalarError(testEnergy, refEnergy);
+    EXPECT_TRUE(std::isfinite(refEnergy));
+    EXPECT_TRUE(std::isfinite(testEnergy));
+    EXPECT_TRUE(std::isfinite(energyDelta));
+    EXPECT_LT(energyDelta, 1.0e-4) << "energy delta=" << energyDelta << " reference=" << refEnergy
+                                   << " test=" << testEnergy;
 }
 
 TEST_F(EspIntegrationTest, Lysozyme_SingleStepSmoke)

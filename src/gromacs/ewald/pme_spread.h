@@ -45,12 +45,15 @@ class PmeAtomComm;
 //! Outputs `rho1d_out` sized 3 * P_padded, with padded lanes zero.
 void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> rho1d_out);
 
+//! Whether make_pswfs() has compile-time stencil-order dispatch for \p P.
+bool make_pswfs_has_compile_time_specialization(int P);
+
 //! ESP charge spreading and derivative windows for eager force gather.
 //! Outputs are sized 3 * P_padded, with padded lanes zero.
-void make_pswfs_and_dpswfs(const gmx_pme_t* pme,
-                           real             fx,
-                           real             fy,
-                           real             fz,
+void make_pswfs_and_dpswfs(const gmx_pme_t*    pme,
+                           real                fx,
+                           real                fy,
+                           real                fz,
                            gmx::ArrayRef<real> rho1d_out,
                            gmx::ArrayRef<real> drho1d_out);
 

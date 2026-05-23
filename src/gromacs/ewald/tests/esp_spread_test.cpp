@@ -26,17 +26,17 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/ewald/pme_internal.h"
-#include "gromacs/ewald/pme_gather.h"
-#include "gromacs/ewald/pme_spread.h"
-#include "gromacs/simd/simd.h"
-#include "gromacs/utility/arrayref.h"
-
 #include <array>
 #include <numeric>
 #include <vector>
 
 #include <gtest/gtest.h>
+
+#include "gromacs/ewald/pme_gather.h"
+#include "gromacs/ewald/pme_internal.h"
+#include "gromacs/ewald/pme_spread.h"
+#include "gromacs/simd/simd.h"
+#include "gromacs/utility/arrayref.h"
 
 namespace gmx::test
 {
@@ -83,6 +83,35 @@ EspParameters makeHornerEsp()
     return esp;
 }
 
+EspParameters makeHornerEsp(int P, int polyOrder)
+{
+    EspParameters esp;
+    esp.P          = P;
+    esp.P_padded   = paddedOrder(esp.P);
+    esp.poly_order = polyOrder;
+    esp.rho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
+    esp.drho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
+
+    for (int order = 0; order < esp.poly_order; ++order)
+    {
+        for (int k = 0; k < esp.P; ++k)
+        {
+            esp.rho_coeff[order * esp.P_padded + k] =
+                    real(0.01) * real(order + 1) + real(0.02) * real(k + 1);
+        }
+    }
+
+    for (int order = 0; order < esp.poly_order - 1; ++order)
+    {
+        for (int k = 0; k < esp.P; ++k)
+        {
+            esp.drho_coeff[order * esp.P_padded + k] =
+                    real(order + 1) * esp.rho_coeff[(order + 1) * esp.P_padded + k];
+        }
+    }
+    return esp;
+}
+
 std::vector<real> evaluateWithMakePswfs(const EspParameters& esp, real fx, real fy, real fz)
 {
     gmx_pme_t pme(nullptr);
@@ -105,7 +134,7 @@ real scalarHorner(const EspParameters& esp, real x, int k)
 
 TEST(EspSpread, ChargeConservation)
 {
-    const EspParameters esp = makePartitionEsp();
+    const EspParameters     esp = makePartitionEsp();
     const std::vector<real> rho = evaluateWithMakePswfs(esp, real(0.13), real(0.37), real(0.61));
 
     std::array<real, DIM> dimSums = { real(0), real(0), real(0) };
@@ -123,9 +152,9 @@ TEST(EspSpread, ChargeConservation)
 
 TEST(EspSpread, SimdEqualsScalarReference)
 {
-    const EspParameters esp = makeHornerEsp();
-    const std::array<real, DIM> x = { real(0.21), real(0.47), real(0.73) };
-    const std::vector<real> rho = evaluateWithMakePswfs(esp, x[XX], x[YY], x[ZZ]);
+    const EspParameters         esp = makeHornerEsp();
+    const std::array<real, DIM> x   = { real(0.21), real(0.47), real(0.73) };
+    const std::vector<real>     rho = evaluateWithMakePswfs(esp, x[XX], x[YY], x[ZZ]);
 
     for (int dim = 0; dim < DIM; ++dim)
     {
@@ -139,7 +168,7 @@ TEST(EspSpread, SimdEqualsScalarReference)
 
 TEST(EspSpread, PaddingDoesNotPollute)
 {
-    const EspParameters esp = makeHornerEsp();
+    const EspParameters     esp = makeHornerEsp();
     const std::vector<real> rho = evaluateWithMakePswfs(esp, real(0.25), real(0.50), real(0.75));
 
     for (int dim = 0; dim < DIM; ++dim)
@@ -147,6 +176,36 @@ TEST(EspSpread, PaddingDoesNotPollute)
         for (int k = esp.P; k < esp.P_padded; ++k)
         {
             EXPECT_EQ(rho[dim * esp.P_padded + k], real(0)) << "dim=" << dim << " k=" << k;
+        }
+    }
+}
+
+TEST(EspSpread, CompileTimeDispatchCoverageIncludesEspOrders)
+{
+    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(4));
+    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(5));
+    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(6));
+    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(7));
+    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(8));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(9));
+}
+
+TEST(EspSpread, CompileTimeDispatchMatchesScalarForEspOrders)
+{
+    const std::array<real, DIM> x = { real(0.19), real(0.43), real(0.77) };
+
+    for (int P = 4; P <= 8; ++P)
+    {
+        const EspParameters     esp = makeHornerEsp(P, 6);
+        const std::vector<real> rho = evaluateWithMakePswfs(esp, x[XX], x[YY], x[ZZ]);
+
+        for (int dim = 0; dim < DIM; ++dim)
+        {
+            for (int k = 0; k < esp.P_padded; ++k)
+            {
+                EXPECT_NEAR(rho[dim * esp.P_padded + k], scalarHorner(esp, x[dim], k), real(1e-6))
+                        << "P=" << P << " dim=" << dim << " k=" << k;
+            }
         }
     }
 }
@@ -171,12 +230,8 @@ TEST(EspSpread, EagerDerivativeMatchesGatherDerivativeEvaluator)
     std::vector<real> dtheta(DIM * esp.P_padded, real(0));
     std::vector<real> gatherDerivative(DIM * esp.P_padded, real(0));
 
-    make_pswfs_and_dpswfs(&pme,
-                          real(0.25),
-                          real(0.50),
-                          real(0.75),
-                          gmx::makeArrayRef(theta),
-                          gmx::makeArrayRef(dtheta));
+    make_pswfs_and_dpswfs(
+            &pme, real(0.25), real(0.50), real(0.75), gmx::makeArrayRef(theta), gmx::makeArrayRef(dtheta));
     gather_f_pswfs(&pme, real(0.25), real(0.50), real(0.75), gmx::makeArrayRef(gatherDerivative));
 
     for (int k = 0; k < DIM * esp.P_padded; ++k)

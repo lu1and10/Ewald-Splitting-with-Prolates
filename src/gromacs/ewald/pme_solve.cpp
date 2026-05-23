@@ -309,20 +309,20 @@ real evaluatePolynomial(const ArrayRef<const real> coefficients, const int order
 
 } // namespace
 
-void calc_exponentials_pswf(const int                 nx,
-                            const int                 ny,
-                            const int                 nz,
-                            const int                 maxkx,
-                            const ivec                localOffset,
-                            const ivec                localNData,
-                            const real                boxX,
-                            const real                boxY,
-                            const real                boxZ,
-                            const real                cutoff,
-                            const real                bandlimit,
-                            const int                 stencilOrder,
+void calc_exponentials_pswf(const int                  nx,
+                            const int                  ny,
+                            const int                  nz,
+                            const int                  maxkx,
+                            const ivec                 localOffset,
+                            const ivec                 localNData,
+                            const real                 boxX,
+                            const real                 boxY,
+                            const real                 boxZ,
+                            const real                 cutoff,
+                            const real                 bandlimit,
+                            const int                  stencilOrder,
                             const ArrayRef<const real> splitFourierPoly,
-                            const int                 splitPolyOrder,
+                            const int                  splitPolyOrder,
                             const ArrayRef<const real> bspModX,
                             const ArrayRef<const real> bspModY,
                             const ArrayRef<const real> bspModZ,
@@ -350,16 +350,26 @@ void calc_exponentials_pswf(const int                 nx,
                        && scratchChi.ssize() >= localNData[XX] && scratchPk.ssize() >= localNData[XX],
                "ESP solve scratch arrays must cover the local x slab");
 
-    const int  kxBegin = localOffset[XX];
-    const int  kxEnd   = localOffset[XX] + localNData[XX];
-    const int  kyBegin = localOffset[YY];
-    const int  kzBegin = localOffset[ZZ];
-    const real volume  = boxX * boxY * boxZ;
-    const real twoPi   = real(2.0 * M_PI);
-    const real invBoxX = real(1) / boxX;
-    const real invBoxY = real(1) / boxY;
-    const real invBoxZ = real(1) / boxZ;
-    const real solveGridScale = real(0.5) * real(stencilOrder);
+    const real* const gmx_restrict splitPoly       = splitFourierPoly.data();
+    const real* const gmx_restrict bspX            = bspModX.data();
+    const real* const gmx_restrict bspY            = bspModY.data();
+    const real* const gmx_restrict bspZ            = bspModZ.data();
+    real* const gmx_restrict       solver          = solverBuffer.data();
+    real* const gmx_restrict       qSquaredScratch = scratchQSquared.data();
+    real* const gmx_restrict       bspXScratch     = scratchBspX.data();
+    real* const gmx_restrict       chiScratch      = scratchChi.data();
+    real* const gmx_restrict       pkScratch       = scratchPk.data();
+
+    const int  kxBegin               = localOffset[XX];
+    const int  kxEnd                 = localOffset[XX] + localNData[XX];
+    const int  kyBegin               = localOffset[YY];
+    const int  kzBegin               = localOffset[ZZ];
+    const real volume                = boxX * boxY * boxZ;
+    const real twoPi                 = real(2.0 * M_PI);
+    const real invBoxX               = real(1) / boxX;
+    const real invBoxY               = real(1) / boxY;
+    const real invBoxZ               = real(1) / boxZ;
+    const real solveGridScale        = real(0.5) * real(stencilOrder);
     const real solveGridScaleSquared = solveGridScale * solveGridScale;
 
     for (int iz = 0; iz < localNData[ZZ]; ++iz)
@@ -381,34 +391,34 @@ void calc_exponentials_pswf(const int                 nx,
             }
             else
             {
-                solverBuffer[solveBufferIndex(0, iy, iz, localOffset, localNData)] = real(0);
-                kxStart = kxBegin + 1;
+                solver[solveBufferIndex(0, iy, iz, localOffset, localNData)] = real(0);
+                kxStart                                                      = kxBegin + 1;
             }
             if (kxStart >= kxEnd)
             {
                 continue;
             }
 
-            const real qyzSquared = qy * qy + qz * qz;
+            const real qyzSquared  = qy * qy + qz * qz;
             const int  positiveEnd = std::min(maxkx, kxEnd);
 
             for (int kx = kxStart; kx < positiveEnd; ++kx)
             {
-                const int  lx = kx - kxBegin;
-                const real qx = twoPi * real(kx) * invBoxX;
-                scratchQSquared[lx] = qx * qx + qyzSquared;
-                scratchBspX[lx]     = bspModX[kx];
+                const int  lx       = kx - kxBegin;
+                const real qx       = twoPi * real(kx) * invBoxX;
+                qSquaredScratch[lx] = qx * qx + qyzSquared;
+                bspXScratch[lx]     = bspX[kx];
             }
             for (int kx = std::max(kxStart, maxkx); kx < kxEnd; ++kx)
             {
-                const int  lx = kx - kxBegin;
-                const int  mx = kx - nx;
-                const real qx = twoPi * real(mx) * invBoxX;
-                scratchQSquared[lx] = qx * qx + qyzSquared;
-                scratchBspX[lx]     = bspModX[kx];
+                const int  lx       = kx - kxBegin;
+                const int  mx       = kx - nx;
+                const real qx       = twoPi * real(mx) * invBoxX;
+                qSquaredScratch[lx] = qx * qx + qyzSquared;
+                bspXScratch[lx]     = bspX[kx];
             }
 
-            const real bspYZ = bspModY[ky] * bspModZ[kz];
+            const real bspYZ = bspY[ky] * bspZ[kz];
 
             int lx = kxStart - kxBegin;
 #if defined PME_SIMD_SOLVE
@@ -421,26 +431,26 @@ void calc_exponentials_pswf(const int                 nx,
             const SimdReal zeroSimd(real(0));
             for (; lx + GMX_SIMD_REAL_WIDTH <= localNData[XX]; lx += GMX_SIMD_REAL_WIDTH)
             {
-                const SimdReal qSquared = loadU<SimdReal>(&scratchQSquared[lx]);
+                const SimdReal qSquared = loadU<SimdReal>(&qSquaredScratch[lx]);
                 const SimdReal arg      = cutoffSimd * sqrt(qSquared);
-                SimdReal       chiHat(splitFourierPoly[splitPolyOrder - 1]);
+                SimdReal       chiHat(splitPoly[splitPolyOrder - 1]);
                 for (int j = splitPolyOrder - 2; j >= 0; --j)
                 {
-                    chiHat = fma(chiHat, arg, SimdReal(splitFourierPoly[j]));
+                    chiHat = fma(chiHat, arg, SimdReal(splitPoly[j]));
                 }
 
-                const SimdReal bspTotal = loadU<SimdReal>(&scratchBspX[lx]) * bspYZSimd;
-                const SimdReal denom    = volumeSimd * bspTotal * qSquared * solveGridScaleSquaredSimd;
-                const auto     valid    = (arg <= bandlimitSimd) && (denom != zeroSimd);
-                const SimdReal pk       = selectByMask((twoPiSimd * chiHat) / denom, valid);
+                const SimdReal bspTotal = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
+                const SimdReal denom = volumeSimd * bspTotal * qSquared * solveGridScaleSquaredSimd;
+                const auto     valid = (arg <= bandlimitSimd) && (denom != zeroSimd);
+                const SimdReal pk    = selectByMask((twoPiSimd * chiHat) / denom, valid);
 
-                storeU(&scratchChi[lx], selectByMask(chiHat, arg <= bandlimitSimd));
-                storeU(&scratchPk[lx], pk);
+                storeU(&chiScratch[lx], selectByMask(chiHat, arg <= bandlimitSimd));
+                storeU(&pkScratch[lx], pk);
             }
 #endif
             for (; lx < localNData[XX]; ++lx)
             {
-                const real qSquared = scratchQSquared[lx];
+                const real qSquared = qSquaredScratch[lx];
                 const real arg      = cutoff * std::sqrt(qSquared);
                 real       chiHat   = evaluatePolynomial(splitFourierPoly, splitPolyOrder, arg);
 
@@ -449,15 +459,16 @@ void calc_exponentials_pswf(const int                 nx,
                     chiHat = real(0);
                 }
 
-                const real denom = volume * scratchBspX[lx] * bspYZ * qSquared * solveGridScaleSquared;
-                scratchChi[lx]   = chiHat;
-                scratchPk[lx]    = (chiHat != real(0) && denom != real(0)) ? (twoPi * chiHat) / denom : real(0);
+                const real denom = volume * bspXScratch[lx] * bspYZ * qSquared * solveGridScaleSquared;
+                chiScratch[lx] = chiHat;
+                pkScratch[lx]  = (chiHat != real(0) && denom != real(0)) ? (twoPi * chiHat) / denom
+                                                                         : real(0);
             }
 
             for (int kx = kxStart; kx < kxEnd; ++kx)
             {
-                const int localX = kx - kxBegin;
-                solverBuffer[solveBufferIndex(kx, iy, iz, localOffset, localNData)] = scratchPk[localX];
+                const int localX                                              = kx - kxBegin;
+                solver[solveBufferIndex(kx, iy, iz, localOffset, localNData)] = pkScratch[localX];
             }
         }
     }
@@ -527,14 +538,15 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
 
     if (pme.useEsp)
     {
-        GMX_ASSERT(ryx == 0 && rzx == 0 && rzy == 0, "ESP PME solve currently supports orthorhombic boxes only");
+        GMX_ASSERT(ryx == 0 && rzx == 0 && rzy == 0,
+                   "ESP PME solve currently supports orthorhombic boxes only");
         clear_mat(work.vir_q);
         work.energy_q = 0;
 
         const real boxX = real(1) / rxx;
         const real boxY = real(1) / ryy;
         const real boxZ = real(1) / rzz;
-        maxkx          = (nx + 1) / 2;
+        maxkx           = (nx + 1) / 2;
 
         for (iyz = iyz0; iyz < iyz1; iyz++)
         {

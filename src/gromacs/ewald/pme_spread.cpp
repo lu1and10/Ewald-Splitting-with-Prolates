@@ -319,10 +319,11 @@ void evaluatePswfPolynomialWindowsRuntime(int                          Pp,
                                           const std::array<real, DIM>& x,
                                           gmx::ArrayRef<real>          out)
 {
+    real* const gmx_restrict outBase = out.data();
     for (int dim = 0; dim < DIM; ++dim)
     {
-        real* const         outDim = out.data() + dim * Pp;
-        const gmx::SimdReal xSimd(x[dim]);
+        real* const gmx_restrict outDim = outBase + dim * Pp;
+        const gmx::SimdReal      xSimd(x[dim]);
 
         for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
         {
@@ -346,10 +347,11 @@ void evaluatePswfPolynomialWindows(const real* gmx_restrict     coefs,
                   "Unsupported compile-time PSWF polynomial order");
     constexpr int Pp = paddedPswfOrder<P>();
 
+    real* const gmx_restrict outBase = out.data();
     for (int dim = 0; dim < DIM; ++dim)
     {
-        real* const         outDim = out.data() + dim * Pp;
-        const gmx::SimdReal xSimd(x[dim]);
+        real* const gmx_restrict outDim = outBase + dim * Pp;
+        const gmx::SimdReal      xSimd(x[dim]);
 
         for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
         {
@@ -583,8 +585,10 @@ static void make_pswf_splines(gmx::ArrayRef<real*> theta,
     const int            Pp  = esp.P_padded;
 
     GMX_ASSERT(P == pme->pme_order, "ESP spread expects pme_order to match esp.P");
-    std::vector<real> rhoScratch(DIM * Pp, real(0));
-    std::vector<real> drhoScratch(DIM * Pp, real(0));
+    std::vector<real>        rhoScratch(DIM * Pp, real(0));
+    std::vector<real>        drhoScratch(DIM * Pp, real(0));
+    real* const gmx_restrict rhoScratchData  = rhoScratch.data();
+    real* const gmx_restrict drhoScratchData = drhoScratch.data();
 
     for (int i = 0; i < nr; i++)
     {
@@ -595,15 +599,15 @@ static void make_pswf_splines(gmx::ArrayRef<real*> theta,
                                   fractx[ii][XX],
                                   fractx[ii][YY],
                                   fractx[ii][ZZ],
-                                  gmx::arrayRefFromArray(rhoScratch.data(), rhoScratch.size()),
-                                  gmx::arrayRefFromArray(drhoScratch.data(), drhoScratch.size()));
+                                  gmx::arrayRefFromArray(rhoScratchData, rhoScratch.size()),
+                                  gmx::arrayRefFromArray(drhoScratchData, drhoScratch.size()));
 
             for (int dim = 0; dim < DIM; ++dim)
             {
-                real* const thetaDim  = theta[dim] + i * P;
-                real* const dthetaDim = dtheta[dim] + i * P;
-                std::copy_n(rhoScratch.data() + dim * Pp, P, thetaDim);
-                std::copy_n(drhoScratch.data() + dim * Pp, P, dthetaDim);
+                real* const gmx_restrict thetaDim  = theta[dim] + i * P;
+                real* const gmx_restrict dthetaDim = dtheta[dim] + i * P;
+                std::copy_n(rhoScratchData + dim * Pp, P, thetaDim);
+                std::copy_n(drhoScratchData + dim * Pp, P, dthetaDim);
             }
         }
     }
@@ -681,9 +685,9 @@ static void spread_coefficients_bsplines_thread(pmegrid_t*                      
             j0 = idxptr[YY] - offy;
             k0 = idxptr[ZZ] - offz;
 
-            const real* thx = spline->theta.coefficients[XX] + norder;
-            const real* thy = spline->theta.coefficients[YY] + norder;
-            const real* thz = spline->theta.coefficients[ZZ] + norder;
+            const real* gmx_restrict thx = spline->theta.coefficients[XX] + norder;
+            const real* gmx_restrict thy = spline->theta.coefficients[YY] + norder;
+            const real* gmx_restrict thz = spline->theta.coefficients[ZZ] + norder;
 
             switch (order)
             {

@@ -315,9 +315,13 @@ void calc_exponentials_pswf(const int                  nx,
                             const int                  maxkx,
                             const ivec                 localOffset,
                             const ivec                 localNData,
-                            const real                 boxX,
-                            const real                 boxY,
-                            const real                 boxZ,
+                            const real                 recipXX,
+                            const real                 recipYX,
+                            const real                 recipYY,
+                            const real                 recipZX,
+                            const real                 recipZY,
+                            const real                 recipZZ,
+                            const real                 boxVolume,
                             const real                 cutoff,
                             const real                 bandlimit,
                             const int                  stencilOrder,
@@ -336,7 +340,9 @@ void calc_exponentials_pswf(const int                  nx,
     GMX_ASSERT(maxkx >= 0 && maxkx <= nx, "ESP solve maxkx out of range");
     GMX_ASSERT(localNData[XX] > 0 && localNData[YY] > 0 && localNData[ZZ] > 0,
                "ESP solve requires positive local grid sizes");
-    GMX_ASSERT(boxX > 0 && boxY > 0 && boxZ > 0, "ESP solve requires positive box lengths");
+    GMX_ASSERT(recipXX != 0 && recipYY != 0 && recipZZ != 0,
+               "ESP solve requires non-zero reciprocal box diagonal");
+    GMX_ASSERT(boxVolume > 0, "ESP solve requires positive box volume");
     GMX_ASSERT(cutoff > 0 && bandlimit > 0, "ESP solve requires positive cutoff and bandlimit");
     GMX_ASSERT(stencilOrder > 0, "ESP solve requires positive stencil order");
     GMX_ASSERT(splitPolyOrder > 0, "ESP solve requires positive split polynomial order");
@@ -364,25 +370,21 @@ void calc_exponentials_pswf(const int                  nx,
     const int  kxEnd                 = localOffset[XX] + localNData[XX];
     const int  kyBegin               = localOffset[YY];
     const int  kzBegin               = localOffset[ZZ];
-    const real volume                = boxX * boxY * boxZ;
     const real twoPi                 = real(2.0 * M_PI);
-    const real invBoxX               = real(1) / boxX;
-    const real invBoxY               = real(1) / boxY;
-    const real invBoxZ               = real(1) / boxZ;
+    const real twoPiSquared          = twoPi * twoPi;
     const real solveGridScale        = real(0.5) * real(stencilOrder);
     const real solveGridScaleSquared = solveGridScale * solveGridScale;
+    const real influencePrefactor    = twoPi / (boxVolume * solveGridScaleSquared);
 
     for (int iz = 0; iz < localNData[ZZ]; ++iz)
     {
         const int  kz = kzBegin + iz;
-        const int  mz = signedGridIndex(kz, nz);
-        const real qz = twoPi * real(mz) * invBoxZ;
+        const real mz = real(signedGridIndex(kz, nz));
 
         for (int iy = 0; iy < localNData[YY]; ++iy)
         {
             const int  ky = kyBegin + iy;
-            const int  my = signedGridIndex(ky, ny);
-            const real qy = twoPi * real(my) * invBoxY;
+            const real my = real(signedGridIndex(ky, ny));
 
             int kxStart;
             if (localOffset[XX] > 0 || ky > 0 || kz > 0)
@@ -399,22 +401,28 @@ void calc_exponentials_pswf(const int                  nx,
                 continue;
             }
 
-            const real qyzSquared  = qy * qy + qz * qz;
+            const real mhyBase     = my * recipYY;
+            const real mhzBase     = my * recipZY + mz * recipZZ;
             const int  positiveEnd = std::min(maxkx, kxEnd);
 
             for (int kx = kxStart; kx < positiveEnd; ++kx)
             {
                 const int  lx       = kx - kxBegin;
-                const real qx       = twoPi * real(kx) * invBoxX;
-                qSquaredScratch[lx] = qx * qx + qyzSquared;
+                const real mx       = real(kx);
+                const real mhx      = mx * recipXX;
+                const real mhy      = mx * recipYX + mhyBase;
+                const real mhz      = mx * recipZX + mhzBase;
+                qSquaredScratch[lx] = twoPiSquared * (mhx * mhx + mhy * mhy + mhz * mhz);
                 bspXScratch[lx]     = bspX[kx];
             }
             for (int kx = std::max(kxStart, maxkx); kx < kxEnd; ++kx)
             {
                 const int  lx       = kx - kxBegin;
-                const int  mx       = kx - nx;
-                const real qx       = twoPi * real(mx) * invBoxX;
-                qSquaredScratch[lx] = qx * qx + qyzSquared;
+                const real mx       = real(kx - nx);
+                const real mhx      = mx * recipXX;
+                const real mhy      = mx * recipYX + mhyBase;
+                const real mhz      = mx * recipZX + mhzBase;
+                qSquaredScratch[lx] = twoPiSquared * (mhx * mhx + mhy * mhy + mhz * mhz);
                 bspXScratch[lx]     = bspX[kx];
             }
 
@@ -424,10 +432,8 @@ void calc_exponentials_pswf(const int                  nx,
 #if defined PME_SIMD_SOLVE
             const SimdReal cutoffSimd(cutoff);
             const SimdReal bandlimitSimd(bandlimit);
-            const SimdReal twoPiSimd(twoPi);
-            const SimdReal volumeSimd(volume);
+            const SimdReal influencePrefactorSimd(influencePrefactor);
             const SimdReal bspYZSimd(bspYZ);
-            const SimdReal solveGridScaleSquaredSimd(solveGridScaleSquared);
             const SimdReal zeroSimd(real(0));
             for (; lx + GMX_SIMD_REAL_WIDTH <= localNData[XX]; lx += GMX_SIMD_REAL_WIDTH)
             {
@@ -440,9 +446,9 @@ void calc_exponentials_pswf(const int                  nx,
                 }
 
                 const SimdReal bspTotal = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
-                const SimdReal denom = volumeSimd * bspTotal * qSquared * solveGridScaleSquaredSimd;
-                const auto     valid = (arg <= bandlimitSimd) && (denom != zeroSimd);
-                const SimdReal pk    = selectByMask((twoPiSimd * chiHat) / denom, valid);
+                const SimdReal denom    = bspTotal * qSquared;
+                const auto     valid    = (arg <= bandlimitSimd) && (denom != zeroSimd);
+                const SimdReal pk = selectByMask((influencePrefactorSimd * chiHat) / denom, valid);
 
                 storeU(&chiScratch[lx], selectByMask(chiHat, arg <= bandlimitSimd));
                 storeU(&pkScratch[lx], pk);
@@ -459,10 +465,11 @@ void calc_exponentials_pswf(const int                  nx,
                     chiHat = real(0);
                 }
 
-                const real denom = volume * bspXScratch[lx] * bspYZ * qSquared * solveGridScaleSquared;
-                chiScratch[lx] = chiHat;
-                pkScratch[lx]  = (chiHat != real(0) && denom != real(0)) ? (twoPi * chiHat) / denom
-                                                                         : real(0);
+                const real denom = bspXScratch[lx] * bspYZ * qSquared;
+                chiScratch[lx]   = chiHat;
+                pkScratch[lx]    = (chiHat != real(0) && denom != real(0))
+                                           ? (influencePrefactor * chiHat) / denom
+                                           : real(0);
             }
 
             for (int kx = kxStart; kx < kxEnd; ++kx)
@@ -538,15 +545,10 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
 
     if (pme.useEsp)
     {
-        GMX_ASSERT(ryx == 0 && rzx == 0 && rzy == 0,
-                   "ESP PME solve currently supports orthorhombic boxes only");
         clear_mat(work.vir_q);
         work.energy_q = 0;
 
-        const real boxX = real(1) / rxx;
-        const real boxY = real(1) / ryy;
-        const real boxZ = real(1) / rzz;
-        maxkx           = (nx + 1) / 2;
+        maxkx = (nx + 1) / 2;
 
         for (iyz = iyz0; iyz < iyz1; iyz++)
         {
@@ -567,9 +569,13 @@ int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,
                                    maxkx,
                                    lineOffset,
                                    lineNData,
-                                   boxX,
-                                   boxY,
-                                   boxZ,
+                                   rxx,
+                                   ryx,
+                                   ryy,
+                                   rzx,
+                                   rzy,
+                                   rzz,
+                                   pme.unitCell.boxVolume,
                                    pme.espRuntime.cutoff,
                                    pme.espRuntime.c,
                                    pme.espRuntime.P,

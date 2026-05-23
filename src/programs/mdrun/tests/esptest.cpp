@@ -55,73 +55,75 @@ struct RunOutput
 
 std::string makeEspMdp(const double accuracy, const int nsteps, const int nstfout, const int stencilOrder)
 {
-    return formatString("integrator               = md\n"
-                        "nsteps                   = %d\n"
-                        "dt                       = 0.001\n"
-                        "continuation             = yes\n"
-                        "constraints              = none\n"
-                        "cutoff-scheme            = Verlet\n"
-                        "coulombtype              = ESP\n"
-                        "rcoulomb                 = 0.8\n"
-                        "rlist                    = 0.8\n"
-                        "vdwtype                  = Cut-off\n"
-                        "rvdw                     = 0.8\n"
-                        "esp-accuracy             = %.8g\n"
-                        "esp-stencil-order        = %d\n"
-                        "pbc                      = xyz\n"
-                        "pcoupl                   = no\n"
-                        "tcoupl                   = no\n"
-                        "free-energy              = no\n"
-                        "ewald-geometry           = 3d\n"
-                        "nwall                    = 0\n"
-                        "nstlist                  = 1\n"
-                        "nstcalcenergy            = 1\n"
-                        "nstenergy                = 1\n"
-                        "nstxout                  = 0\n"
-                        "nstvout                  = 0\n"
-                        "nstfout                  = %d\n"
-                        "nstlog                   = 0\n",
-                        nsteps,
-                        accuracy,
-                        stencilOrder,
-                        nstfout);
+    return formatString(
+            "integrator               = md\n"
+            "nsteps                   = %d\n"
+            "dt                       = 0.001\n"
+            "continuation             = yes\n"
+            "constraints              = none\n"
+            "cutoff-scheme            = Verlet\n"
+            "coulombtype              = ESP\n"
+            "rcoulomb                 = 0.8\n"
+            "rlist                    = 0.8\n"
+            "vdwtype                  = Cut-off\n"
+            "rvdw                     = 0.8\n"
+            "esp-accuracy             = %.8g\n"
+            "esp-stencil-order        = %d\n"
+            "pbc                      = xyz\n"
+            "pcoupl                   = no\n"
+            "tcoupl                   = no\n"
+            "free-energy              = no\n"
+            "ewald-geometry           = 3d\n"
+            "nwall                    = 0\n"
+            "nstlist                  = 1\n"
+            "nstcalcenergy            = 1\n"
+            "nstenergy                = 1\n"
+            "nstxout                  = 0\n"
+            "nstvout                  = 0\n"
+            "nstfout                  = %d\n"
+            "nstlog                   = 0\n",
+            nsteps,
+            accuracy,
+            stencilOrder,
+            nstfout);
 }
 
-std::string makePmeMdp(const int nsteps,
-                       const int nstfout,
+std::string makePmeMdp(const int    nsteps,
+                       const int    nstfout,
                        const double fourierSpacing = 0.12,
                        const int    pmeOrder       = 4)
 {
-    return formatString("integrator               = md\n"
-                        "nsteps                   = %d\n"
-                        "dt                       = 0.001\n"
-                        "continuation             = yes\n"
-                        "constraints              = none\n"
-                        "cutoff-scheme            = Verlet\n"
-                        "coulombtype              = PME\n"
-                        "rcoulomb                 = 0.8\n"
-                        "rlist                    = 0.8\n"
-                        "vdwtype                  = Cut-off\n"
-                        "rvdw                     = 0.8\n"
-                        "fourierspacing           = %.8g\n"
-                        "pme-order                = %d\n"
-                        "pbc                      = xyz\n"
-                        "pcoupl                   = no\n"
-                        "tcoupl                   = no\n"
-                        "free-energy              = no\n"
-                        "ewald-geometry           = 3d\n"
-                        "nwall                    = 0\n"
-                        "nstlist                  = 1\n"
-                        "nstcalcenergy            = 1\n"
-                        "nstenergy                = 1\n"
-                        "nstxout                  = 0\n"
-                        "nstvout                  = 0\n"
-                        "nstfout                  = %d\n"
-                        "nstlog                   = 0\n",
-                        nsteps,
-                        fourierSpacing,
-                        pmeOrder,
-                        nstfout);
+    return formatString(
+            "integrator               = md\n"
+            "nsteps                   = %d\n"
+            "dt                       = 0.001\n"
+            "continuation             = yes\n"
+            "constraints              = none\n"
+            "cutoff-scheme            = Verlet\n"
+            "coulombtype              = PME\n"
+            "rcoulomb                 = 0.8\n"
+            "rlist                    = 0.8\n"
+            "vdwtype                  = Cut-off\n"
+            "rvdw                     = 0.8\n"
+            "fourierspacing           = %.8g\n"
+            "pme-order                = %d\n"
+            "pbc                      = xyz\n"
+            "pcoupl                   = no\n"
+            "tcoupl                   = no\n"
+            "free-energy              = no\n"
+            "ewald-geometry           = 3d\n"
+            "nwall                    = 0\n"
+            "nstlist                  = 1\n"
+            "nstcalcenergy            = 1\n"
+            "nstenergy                = 1\n"
+            "nstxout                  = 0\n"
+            "nstvout                  = 0\n"
+            "nstfout                  = %d\n"
+            "nstlog                   = 0\n",
+            nsteps,
+            fourierSpacing,
+            pmeOrder,
+            nstfout);
 }
 
 CommandLine makeCpuMdrunCommandLine()
@@ -148,8 +150,7 @@ protected:
                 fileManager_.getTemporaryFilePath(label + ".trr").string();
         runner->groOutputFileName_ = fileManager_.getTemporaryFilePath(label + ".gro").string();
         runner->cptOutputFileName_ = fileManager_.getTemporaryFilePath(label + ".cpt").string();
-        runner->mdpOutputFileName_ =
-                fileManager_.getTemporaryFilePath(label + "-output.mdp").string();
+        runner->mdpOutputFileName_ = fileManager_.getTemporaryFilePath(label + "-output.mdp").string();
         runner->tprFileName_ = fileManager_.getTemporaryFilePath(label + ".tpr").string();
         runner->logFileName_ = fileManager_.getTemporaryFilePath(label + ".log").string();
         runner->edrFileName_ = fileManager_.getTemporaryFilePath(label + ".edr").string();
@@ -164,39 +165,38 @@ protected:
         runner.groFileName_ = TestFileManager::getInputFilePath("spc216.gro").string();
         runner.useStringAsMdpFile(mdpContents);
 
-        TextWriter::writeFileFromString(
-                runner.topFileName_,
-                "[ defaults ]\n"
-                "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
-                "1 2 yes 0.5 0.5\n"
-                "\n"
-                "[ atomtypes ]\n"
-                "; name at.num mass charge ptype sigma epsilon\n"
-                "OW 8 15.999 0.0 A 0.31506 0.6364\n"
-                "HW 1 1.008  0.0 A 0.00000 0.0000\n"
-                "\n"
-                "[ moleculetype ]\n"
-                "; name nrexcl\n"
-                "SOL 2\n"
-                "\n"
-                "[ atoms ]\n"
-                "; nr type resnr residue atom cgnr charge mass\n"
-                "1 OW 1 SOL OW  1 -0.834 15.999\n"
-                "2 HW 1 SOL HW1 1  0.417 1.008\n"
-                "3 HW 1 SOL HW2 1  0.417 1.008\n"
-                "\n"
-                "[ bonds ]\n"
-                "1 2 1 0.1 345000\n"
-                "1 3 1 0.1 345000\n"
-                "\n"
-                "[ angles ]\n"
-                "2 1 3 1 109.47 383\n"
-                "\n"
-                "[ system ]\n"
-                "ESP integration water\n"
-                "\n"
-                "[ molecules ]\n"
-                "SOL 216\n");
+        TextWriter::writeFileFromString(runner.topFileName_,
+                                        "[ defaults ]\n"
+                                        "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
+                                        "1 2 yes 0.5 0.5\n"
+                                        "\n"
+                                        "[ atomtypes ]\n"
+                                        "; name at.num mass charge ptype sigma epsilon\n"
+                                        "OW 8 15.999 0.0 A 0.31506 0.6364\n"
+                                        "HW 1 1.008  0.0 A 0.00000 0.0000\n"
+                                        "\n"
+                                        "[ moleculetype ]\n"
+                                        "; name nrexcl\n"
+                                        "SOL 2\n"
+                                        "\n"
+                                        "[ atoms ]\n"
+                                        "; nr type resnr residue atom cgnr charge mass\n"
+                                        "1 OW 1 SOL OW  1 -0.834 15.999\n"
+                                        "2 HW 1 SOL HW1 1  0.417 1.008\n"
+                                        "3 HW 1 SOL HW2 1  0.417 1.008\n"
+                                        "\n"
+                                        "[ bonds ]\n"
+                                        "1 2 1 0.1 345000\n"
+                                        "1 3 1 0.1 345000\n"
+                                        "\n"
+                                        "[ angles ]\n"
+                                        "2 1 3 1 109.47 383\n"
+                                        "\n"
+                                        "[ system ]\n"
+                                        "ESP integration water\n"
+                                        "\n"
+                                        "[ molecules ]\n"
+                                        "SOL 216\n");
 
         if (runner.callGrompp() != 0)
         {
@@ -238,7 +238,7 @@ protected:
         return { runner.fullPrecisionTrajectoryFileName_, runner.edrFileName_ };
     }
 
-    RunOutput runInlineIonSystem(const std::string& mdpContents)
+    RunOutput runInlineIonSystem(const std::string& mdpContents, const bool triclinicBox = false)
     {
         SimulationRunner runner(&fileManager_);
         runner.topFileName_ = fileManager_.getTemporaryFilePath("esp-ions.top").string();
@@ -246,43 +246,46 @@ protected:
         runner.useStringAsMdpFile(mdpContents);
         runner.setMaxWarn(1);
 
-        TextWriter::writeFileFromString(
-                runner.topFileName_,
-                "[ defaults ]\n"
-                "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
-                "1 2 yes 0.5 0.5\n"
-                "\n"
-                "[ atomtypes ]\n"
-                "; name at.num mass charge ptype sigma epsilon\n"
-                "NA 11 22.9898 0.0 A 0.257 0.1\n"
-                "CL 17 35.4500 0.0 A 0.440 0.1\n"
-                "\n"
-                "[ moleculetype ]\n"
-                "NA 1\n"
-                "\n"
-                "[ atoms ]\n"
-                "1 NA 1 NA NA 1 1.0 22.9898\n"
-                "\n"
-                "[ moleculetype ]\n"
-                "CL 1\n"
-                "\n"
-                "[ atoms ]\n"
-                "1 CL 1 CL CL 1 -1.0 35.45\n"
-                "\n"
-                "[ system ]\n"
-                "ESP non-neutral ion smoke\n"
-                "\n"
-                "[ molecules ]\n"
-                "NA 2\n"
-                "CL 1\n");
-
-        TextWriter::writeFileFromString(runner.groFileName_,
+        TextWriter::writeFileFromString(runner.topFileName_,
+                                        "[ defaults ]\n"
+                                        "; nbfunc comb-rule gen-pairs fudgeLJ fudgeQQ\n"
+                                        "1 2 yes 0.5 0.5\n"
+                                        "\n"
+                                        "[ atomtypes ]\n"
+                                        "; name at.num mass charge ptype sigma epsilon\n"
+                                        "NA 11 22.9898 0.0 A 0.257 0.1\n"
+                                        "CL 17 35.4500 0.0 A 0.440 0.1\n"
+                                        "\n"
+                                        "[ moleculetype ]\n"
+                                        "NA 1\n"
+                                        "\n"
+                                        "[ atoms ]\n"
+                                        "1 NA 1 NA NA 1 1.0 22.9898\n"
+                                        "\n"
+                                        "[ moleculetype ]\n"
+                                        "CL 1\n"
+                                        "\n"
+                                        "[ atoms ]\n"
+                                        "1 CL 1 CL CL 1 -1.0 35.45\n"
+                                        "\n"
+                                        "[ system ]\n"
                                         "ESP non-neutral ion smoke\n"
-                                        "3\n"
-                                        "    1NA      NA    1   0.500   0.500   0.500\n"
-                                        "    2NA      NA    2   1.500   1.500   1.500\n"
-                                        "    3CL      CL    3   2.500   2.500   2.500\n"
-                                        "   3.00000   3.00000   3.00000\n");
+                                        "\n"
+                                        "[ molecules ]\n"
+                                        "NA 2\n"
+                                        "CL 1\n");
+
+        TextWriter::writeFileFromString(
+                runner.groFileName_,
+                formatString("ESP non-neutral ion smoke\n"
+                             "3\n"
+                             "    1NA      NA    1   0.500   0.500   0.500\n"
+                             "    2NA      NA    2   1.500   1.500   1.500\n"
+                             "    3CL      CL    3   2.500   2.500   2.500\n"
+                             "%s",
+                             triclinicBox ? "   3.00000   3.10000   3.20000   0.00000   0.00000   "
+                                            "0.20000   0.00000   0.10000   0.15000\n"
+                                          : "   3.00000   3.00000   3.00000\n"));
 
         if (runner.callGrompp() != 0)
         {
@@ -301,7 +304,7 @@ protected:
 
 std::vector<RVec> readLastForces(const std::string& trajectoryFileName)
 {
-    std::vector<RVec> forces;
+    std::vector<RVec>     forces;
     TrajectoryFrameReader reader(trajectoryFileName);
     while (reader.readNextFrame())
     {
@@ -322,13 +325,12 @@ real readLastElectrostaticEnergy(const std::string& energyFileName)
 
     bool foundFrame = false;
     real energy     = 0;
-    auto reader =
-            openEnergyFileToReadTerms(energyFileName, { c_coulombShortRange, c_coulombReciprocal });
+    auto reader = openEnergyFileToReadTerms(energyFileName, { c_coulombShortRange, c_coulombReciprocal });
     while (reader->readNextFrame())
     {
         const EnergyFrame& frame = reader->frame();
-        energy = frame.at(c_coulombShortRange) + frame.at(c_coulombReciprocal);
-        foundFrame = true;
+        energy                   = frame.at(c_coulombShortRange) + frame.at(c_coulombReciprocal);
+        foundFrame               = true;
     }
     if (!foundFrame)
     {
@@ -379,8 +381,7 @@ void expectFiniteForces(const std::vector<RVec>& forces)
 
 TEST_F(EspIntegrationTest, SpcEWater_ForceAndEnergyErrorVsHighAccuracyPme)
 {
-    const RunOutput reference =
-            runSpcWaterSystem("spce-high-accuracy-pme", makePmeMdp(1, 1, 0.04, 6));
+    const RunOutput reference = runSpcWaterSystem("spce-high-accuracy-pme", makePmeMdp(1, 1, 0.04, 6));
     const RunOutput test = runSpcWaterSystem("spce-esp", makeEspMdp(1.0e-4, 1, 1, -1));
 
     const std::vector<RVec> refForces  = readLastForces(reference.trajectoryFileName);
@@ -420,6 +421,15 @@ TEST_F(EspIntegrationTest, SpcEWater_AgreementWithPme)
 TEST_F(EspIntegrationTest, NaClNonNeutral_HighQ2SumSmoke)
 {
     const RunOutput output = runInlineIonSystem(makeEspMdp(1.0e-4, 1, 1, -1));
+
+    const std::vector<RVec> forces = readLastForces(output.trajectoryFileName);
+    ASSERT_EQ(forces.size(), 3U);
+    expectFiniteForces(forces);
+}
+
+TEST_F(EspIntegrationTest, NaClTriclinic_SingleStepSmoke)
+{
+    const RunOutput output = runInlineIonSystem(makeEspMdp(1.0e-4, 1, 1, -1), true);
 
     const std::vector<RVec> forces = readLastForces(output.trajectoryFileName);
     ASSERT_EQ(forces.size(), 3U);

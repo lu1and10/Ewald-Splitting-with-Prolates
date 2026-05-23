@@ -2839,13 +2839,6 @@ int gmx_grompp(int argc, char* argv[])
 
     if (ir->coulombtype == CoulombInteractionType::Esp)
     {
-        if (TRICLINIC(state.box))
-        {
-            gmx_fatal(FARGS,
-                      "ESP MVP supports only orthorhombic boxes; triclinic boxes are not "
-                      "supported by this CPU ESP implementation.");
-        }
-
         double q2sum = 0;
         for (const gmx_molblock_t& molblock : sys.molblock)
         {

@@ -305,7 +305,7 @@ static void make_bsplines(gmx::ArrayRef<real*> theta,
 namespace
 {
 
-constexpr int c_maxSpecializedPswfPolyOrder = 24;
+constexpr int c_maxSpecializedPswfPolyOrder = 16;
 
 template<int P>
 constexpr int paddedPswfOrder()
@@ -313,12 +313,37 @@ constexpr int paddedPswfOrder()
     return ((P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 }
 
-void evaluatePswfPolynomialWindowsRuntime(int                          Pp,
-                                          int                          polyOrder,
-                                          const real* gmx_restrict     coefs,
-                                          const std::array<real, DIM>& x,
-                                          gmx::ArrayRef<real>          out)
+template<int P = 0, int PolyOrder = 0>
+void evaluatePswfPolynomialWindows(const int                    runtimePp,
+                                   const int                    runtimePolyOrder,
+                                   const real* gmx_restrict     coefs,
+                                   const std::array<real, DIM>& x,
+                                   gmx::ArrayRef<real>          out)
 {
+    static_assert(P == 0 || (P >= 4 && P <= 8),
+                  "This ESP spread specialization is for common CPU ESP stencils");
+    static_assert(PolyOrder == 0 || (PolyOrder > 0 && PolyOrder <= c_maxSpecializedPswfPolyOrder),
+                  "Unsupported compile-time PSWF polynomial order");
+    int Pp;
+    if constexpr (P == 0)
+    {
+        Pp = runtimePp;
+    }
+    else
+    {
+        Pp = paddedPswfOrder<P>();
+    }
+
+    int polyOrder;
+    if constexpr (PolyOrder == 0)
+    {
+        polyOrder = runtimePolyOrder;
+    }
+    else
+    {
+        polyOrder = PolyOrder;
+    }
+
     real* const gmx_restrict outBase = out.data();
     for (int dim = 0; dim < DIM; ++dim)
     {
@@ -338,34 +363,6 @@ void evaluatePswfPolynomialWindowsRuntime(int                          Pp,
 }
 
 template<int P, int PolyOrder>
-void evaluatePswfPolynomialWindows(const real* gmx_restrict     coefs,
-                                   const std::array<real, DIM>& x,
-                                   gmx::ArrayRef<real>          out)
-{
-    static_assert(P >= 4 && P <= 8, "This ESP spread specialization is for common CPU ESP stencils");
-    static_assert(PolyOrder > 0 && PolyOrder <= c_maxSpecializedPswfPolyOrder,
-                  "Unsupported compile-time PSWF polynomial order");
-    constexpr int Pp = paddedPswfOrder<P>();
-
-    real* const gmx_restrict outBase = out.data();
-    for (int dim = 0; dim < DIM; ++dim)
-    {
-        real* const gmx_restrict outDim = outBase + dim * Pp;
-        const gmx::SimdReal      xSimd(x[dim]);
-
-        for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
-        {
-            gmx::SimdReal value = gmx::load<gmx::SimdReal>(&coefs[(PolyOrder - 1) * Pp + k]);
-            for (int order = PolyOrder - 2; order >= 0; --order)
-            {
-                value = gmx::fma(value, xSimd, gmx::load<gmx::SimdReal>(&coefs[order * Pp + k]));
-            }
-            gmx::storeU(outDim + k, value);
-        }
-    }
-}
-
-template<int P, int PolyOrder>
 void makePswfsConstPolyOrder(const EspParameters& esp, const std::array<real, DIM>& x, gmx::ArrayRef<real> rho1dOut)
 {
     constexpr int Pp = paddedPswfOrder<P>();
@@ -374,7 +371,7 @@ void makePswfsConstPolyOrder(const EspParameters& esp, const std::array<real, DI
                "ESP spread compile-time dispatch used with inconsistent P_padded");
     GMX_ASSERT(esp.poly_order == PolyOrder,
                "ESP spread compile-time dispatch used with inconsistent polynomial order");
-    evaluatePswfPolynomialWindows<P, PolyOrder>(esp.rho_coeff.data(), x, rho1dOut);
+    evaluatePswfPolynomialWindows<P, PolyOrder>(Pp, PolyOrder, esp.rho_coeff.data(), x, rho1dOut);
 }
 
 template<int P, int PolyOrder>
@@ -390,8 +387,8 @@ void makePswfsAndDpswfsConstPolyOrder(const EspParameters&         esp,
                "ESP spread compile-time dispatch used with inconsistent P_padded");
     GMX_ASSERT(esp.poly_order == PolyOrder,
                "ESP spread compile-time dispatch used with inconsistent polynomial order");
-    evaluatePswfPolynomialWindows<P, PolyOrder>(esp.rho_coeff.data(), x, rho1dOut);
-    evaluatePswfPolynomialWindows<P, PolyOrder - 1>(esp.drho_coeff.data(), x, drho1dOut);
+    evaluatePswfPolynomialWindows<P, PolyOrder>(Pp, PolyOrder, esp.rho_coeff.data(), x, rho1dOut);
+    evaluatePswfPolynomialWindows<P, PolyOrder - 1>(Pp, PolyOrder - 1, esp.drho_coeff.data(), x, drho1dOut);
 }
 
 #define GMX_ESP_SPREAD_DISPATCH_RHO(PValue, PolyValue) \
@@ -418,14 +415,6 @@ bool dispatchMakePswfsConstP(const EspParameters& esp, const std::array<real, DI
         GMX_ESP_SPREAD_DISPATCH_RHO(P, 14);
         GMX_ESP_SPREAD_DISPATCH_RHO(P, 15);
         GMX_ESP_SPREAD_DISPATCH_RHO(P, 16);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 17);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 18);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 19);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 20);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 21);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 22);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 23);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 24);
         default: return false;
     }
 }
@@ -473,14 +462,6 @@ bool dispatchMakePswfsAndDpswfsConstP(const EspParameters&         esp,
         GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 14);
         GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 15);
         GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 16);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 17);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 18);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 19);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 20);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 21);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 22);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 23);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 24);
         default: return false;
     }
 }
@@ -527,7 +508,7 @@ void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<r
         return;
     }
 
-    evaluatePswfPolynomialWindowsRuntime(Pp, polyOrder, esp.rho_coeff.data(), x, rho1d_out);
+    evaluatePswfPolynomialWindows(Pp, polyOrder, esp.rho_coeff.data(), x, rho1d_out);
 }
 
 bool make_pswfs_has_compile_time_specialization(int P)
@@ -567,8 +548,8 @@ void make_pswfs_and_dpswfs(const gmx_pme_t*    pme,
         return;
     }
 
-    evaluatePswfPolynomialWindowsRuntime(Pp, polyOrder, esp.rho_coeff.data(), x, rho1d_out);
-    evaluatePswfPolynomialWindowsRuntime(Pp, dPolyOrder, esp.drho_coeff.data(), x, drho1d_out);
+    evaluatePswfPolynomialWindows(Pp, polyOrder, esp.rho_coeff.data(), x, rho1d_out);
+    evaluatePswfPolynomialWindows(Pp, dPolyOrder, esp.drho_coeff.data(), x, drho1d_out);
 }
 
 static void make_pswf_splines(gmx::ArrayRef<real*> theta,

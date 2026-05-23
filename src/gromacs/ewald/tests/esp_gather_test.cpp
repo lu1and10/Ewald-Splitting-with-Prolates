@@ -86,15 +86,6 @@ std::vector<real> evaluateSpread(const EspParameters& esp, const std::array<real
     return rho;
 }
 
-std::vector<real> evaluateDerivative(const EspParameters& esp, const std::array<real, DIM>& x)
-{
-    gmx_pme_t pme(nullptr);
-    pme.espRuntime = esp;
-    std::vector<real> drho(DIM * esp.P_padded, real(0));
-    gather_f_pswfs(&pme, x[XX], x[YY], x[ZZ], gmx::makeArrayRef(drho));
-    return drho;
-}
-
 real scalarHorner(gmx::ArrayRef<const real> coefs, int order, int Pp, real x, int k)
 {
     real value = coefs[(order - 1) * Pp + k];
@@ -103,6 +94,20 @@ real scalarHorner(gmx::ArrayRef<const real> coefs, int order, int Pp, real x, in
         value = value * x + coefs[i * Pp + k];
     }
     return value;
+}
+
+std::vector<real> evaluateDerivative(const EspParameters& esp, const std::array<real, DIM>& x)
+{
+    std::vector<real> drho(DIM * esp.P_padded, real(0));
+    for (int dim = 0; dim < DIM; ++dim)
+    {
+        for (int k = 0; k < esp.P_padded; ++k)
+        {
+            drho[dim * esp.P_padded + k] = scalarHorner(
+                    gmx::makeConstArrayRef(esp.drho_coeff), esp.poly_order - 1, esp.P_padded, x[dim], k);
+        }
+    }
+    return drho;
 }
 
 TEST(EspGather, AdjointToSpread)

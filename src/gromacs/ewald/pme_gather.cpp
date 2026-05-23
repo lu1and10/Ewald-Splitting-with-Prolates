@@ -36,8 +36,6 @@
 
 #include "pme_gather.h"
 
-#include <array>
-
 #include "gromacs/simd/simd.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/gmxassert.h"
@@ -49,42 +47,6 @@
 #include "pme_spline_work.h"
 
 using namespace gmx; // TODO: Remove when this file is moved into gmx namespace
-
-void gather_f_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<real> drho1d_out)
-{
-    GMX_ASSERT(pme != nullptr, "ESP gather requires a valid PME object");
-    const EspParameters& esp        = pme->espRuntime;
-    const int            P          = esp.P;
-    const int            Pp         = esp.P_padded;
-    const int            dPolyOrder = esp.poly_order - 1;
-
-    GMX_ASSERT(P > 0, "ESP gather requires positive stencil order");
-    GMX_ASSERT(Pp >= P, "ESP gather requires P_padded >= P");
-    GMX_ASSERT(Pp % GMX_SIMD_REAL_WIDTH == 0, "ESP gather requires SIMD-aligned P_padded");
-    GMX_ASSERT(dPolyOrder > 0, "ESP gather requires at least a linear spreading polynomial");
-    GMX_ASSERT(esp.drho_coeff.size() >= static_cast<size_t>(dPolyOrder * Pp),
-               "ESP gather derivative coefficient table is too small");
-    GMX_ASSERT(drho1d_out.ssize() == DIM * Pp, "drho1d_out must be sized 3 * P_padded");
-
-    const std::array<real, DIM> x     = { fx, fy, fz };
-    const real* const           coefs = esp.drho_coeff.data();
-
-    for (int dim = 0; dim < DIM; ++dim)
-    {
-        real* const    outDim = drho1d_out.data() + dim * Pp;
-        const SimdReal xSimd(x[dim]);
-
-        for (int k = 0; k < Pp; k += GMX_SIMD_REAL_WIDTH)
-        {
-            SimdReal drho = load<SimdReal>(&coefs[(dPolyOrder - 1) * Pp + k]);
-            for (int order = dPolyOrder - 2; order >= 0; --order)
-            {
-                drho = fma(drho, xSimd, load<SimdReal>(&coefs[order * Pp + k]));
-            }
-            storeU(outDim + k, drho);
-        }
-    }
-}
 
 bool gather_f_bsplines_has_simd4_specialization(int order)
 {

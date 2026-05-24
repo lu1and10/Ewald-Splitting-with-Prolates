@@ -105,6 +105,16 @@ double splitFourierPolynomialValue(const AlignedRealVector& coefs,
     return value;
 }
 
+double polynomialValue(const AlignedRealVector& coefs, const int polyOrder, const double x)
+{
+    double value = coefs[polyOrder - 1];
+    for (int l = polyOrder - 2; l >= 0; --l)
+    {
+        value = value * x + coefs[l];
+    }
+    return value;
+}
+
 TEST(Pswf0, ConstructionRangeChecks)
 {
     EXPECT_THROW(Pswf0(0.0), std::invalid_argument);
@@ -391,11 +401,7 @@ TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)
     Pswf0 psi(12.024);
     for (double r : { 0.1, 0.3, 0.5, 0.7, 0.9 })
     {
-        double poly = coefs[polyOrder - 1];
-        for (int l = polyOrder - 2; l >= 0; --l)
-        {
-            poly = poly * r + coefs[l];
-        }
+        const double poly = polynomialValue(coefs, polyOrder, r);
         EXPECT_NEAR(poly, longRangeEnergyCorrectionReference(psi, r), 1e-4) << "r=" << r;
     }
 }
@@ -410,12 +416,47 @@ TEST(ShortRangeForcePoly, MatchesLongRangeForceCorrection)
     Pswf0 psi(12.024);
     for (double r : { 0.1, 0.3, 0.5, 0.7, 0.9 })
     {
-        double poly = coefs[polyOrder - 1];
-        for (int l = polyOrder - 2; l >= 0; --l)
-        {
-            poly = poly * r + coefs[l];
-        }
+        const double poly = polynomialValue(coefs, polyOrder, r);
         EXPECT_NEAR(poly, longRangeForceCorrectionReference(psi, r), 1e-3) << "r=" << r;
+    }
+}
+
+TEST(ShortRangePoly, TightToleranceRaisesAdaptiveOrderPastLegacyCap)
+{
+    AlignedRealVector looseCoefs;
+    AlignedRealVector tightCoefs;
+    int               looseOrder = 0;
+    int               tightOrder = 0;
+
+    shortRangeForcePoly(1e-3, 1e-3, 14.471, &looseCoefs, &looseOrder);
+    shortRangeForcePoly(1e-8, 1e-10, 14.471, &tightCoefs, &tightOrder);
+
+    EXPECT_LT(looseOrder, tightOrder);
+    EXPECT_GT(tightOrder, 16);
+}
+
+TEST(ShortRangePoly, TightToleranceMatchesDenseReferenceSamples)
+{
+    AlignedRealVector forceCoefs;
+    AlignedRealVector energyCoefs;
+    int               forceOrder  = 0;
+    int               energyOrder = 0;
+
+    constexpr double c = 14.471;
+    shortRangeForcePoly(1e-8, 1e-10, c, &forceCoefs, &forceOrder);
+    shortRangeEnergyPoly(1e-8, 1e-10, c, &energyCoefs, &energyOrder);
+    ASSERT_GT(forceOrder, 16);
+    ASSERT_GT(energyOrder, 16);
+
+    const Pswf0  psi(c);
+    const double tolerance = GMX_DOUBLE ? 5e-8 : 5e-5;
+    for (int i = 1; i < 64; ++i)
+    {
+        const double r = static_cast<double>(i) / 64.0;
+        EXPECT_NEAR(polynomialValue(forceCoefs, forceOrder, r), longRangeForceCorrectionReference(psi, r), tolerance)
+                << "force r=" << r << " order=" << forceOrder;
+        EXPECT_NEAR(polynomialValue(energyCoefs, energyOrder, r), longRangeEnergyCorrectionReference(psi, r), tolerance)
+                << "energy r=" << r << " order=" << energyOrder;
     }
 }
 

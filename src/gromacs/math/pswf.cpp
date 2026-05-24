@@ -370,7 +370,7 @@ std::vector<double> chebNodes(int n)
     return nodes;
 }
 
-std::vector<double> chebSamplesToMonomial(const std::vector<double>& fSamples)
+std::vector<double> chebCoefficientsFromSamples(const std::vector<double>& fSamples)
 {
     const int           n = static_cast<int>(fSamples.size());
     std::vector<double> chebCoefficients(n, 0.0);
@@ -383,31 +383,80 @@ std::vector<double> chebSamplesToMonomial(const std::vector<double>& fSamples)
         }
         chebCoefficients[j] = (j == 0 ? 1.0 : 2.0) * sum / n;
     }
+    return chebCoefficients;
+}
 
-    std::vector<std::vector<double>> chebToMonomial(n, std::vector<double>(n, 0.0));
-    chebToMonomial[0][0] = 1.0;
-    if (n > 1)
+int adaptiveOrderFromChebCoefficients(const std::vector<double>& chebCoefficients, double relativeTolerance)
+{
+    GMX_ASSERT(relativeTolerance > 0.0, "Adaptive PSWF polynomial fit requires positive tolerance");
+
+    double maxCoeff = 0.0;
+    for (const double coefficient : chebCoefficients)
     {
-        chebToMonomial[1][1] = 1.0;
+        maxCoeff = std::max(maxCoeff, std::abs(coefficient));
     }
-    for (int k = 2; k < n; ++k)
+    if (maxCoeff == 0.0)
     {
-        for (int j = 0; j < n; ++j)
+        return 1;
+    }
+
+    const double cutoff = relativeTolerance * maxCoeff;
+    int          order  = 1;
+    for (int i = 0; i < static_cast<int>(chebCoefficients.size()); ++i)
+    {
+        if (std::abs(chebCoefficients[i]) > cutoff)
         {
-            chebToMonomial[k][j] =
-                    2.0 * (j > 0 ? chebToMonomial[k - 1][j - 1] : 0.0) - chebToMonomial[k - 2][j];
+            order = i + 1;
+        }
+    }
+    return order;
+}
+
+std::vector<double> multiplyByXMinus(const std::vector<double>& polynomial, double root)
+{
+    std::vector<double> result(polynomial.size() + 1, 0.0);
+    for (std::size_t i = 0; i < polynomial.size(); ++i)
+    {
+        result[i] += -root * polynomial[i];
+        result[i + 1] += polynomial[i];
+    }
+    return result;
+}
+
+std::vector<double> samplesToMonomialAtNodes(const std::vector<double>& nodes,
+                                             const std::vector<double>& samples)
+{
+    GMX_ASSERT(nodes.size() == samples.size(),
+               "Polynomial interpolation nodes and samples must match");
+
+    const int           n = static_cast<int>(samples.size());
+    std::vector<double> dividedDifferences(samples);
+    for (int j = 1; j < n; ++j)
+    {
+        for (int i = n - 1; i >= j; --i)
+        {
+            dividedDifferences[i] =
+                    (dividedDifferences[i] - dividedDifferences[i - 1]) / (nodes[i] - nodes[i - j]);
         }
     }
 
     std::vector<double> monomial(n, 0.0);
-    for (int k = 0; k < n; ++k)
+    monomial[0] = dividedDifferences[0];
+    std::vector<double> basis{ 1.0 };
+    for (int j = 1; j < n; ++j)
     {
-        for (int j = 0; j <= k; ++j)
+        basis = multiplyByXMinus(basis, nodes[j - 1]);
+        for (std::size_t i = 0; i < basis.size(); ++i)
         {
-            monomial[j] += chebCoefficients[k] * chebToMonomial[k][j];
+            monomial[i] += dividedDifferences[j] * basis[i];
         }
     }
     return monomial;
+}
+
+std::vector<double> chebSamplesToMonomial(const std::vector<double>& fSamples)
+{
+    return samplesToMonomialAtNodes(chebNodes(static_cast<int>(fSamples.size())), fSamples);
 }
 
 int truncateToTol(std::vector<double>* monomial, double tol)
@@ -419,21 +468,6 @@ int truncateToTol(std::vector<double>* monomial, double tol)
     }
     monomial->resize(order);
     return order;
-}
-
-std::vector<double> composeMonomialWithAffine(const std::vector<double>& monomial, double a, double b)
-{
-    std::vector<double> composed(monomial.size(), 0.0);
-    for (int degree = 0; degree < static_cast<int>(monomial.size()); ++degree)
-    {
-        double choose = 1.0;
-        for (int k = 0; k <= degree; ++k)
-        {
-            composed[k] += monomial[degree] * choose * std::pow(b, degree - k) * std::pow(a, k);
-            choose *= static_cast<double>(degree - k) / (k + 1);
-        }
-    }
-    return composed;
 }
 
 double longRangeEnergyCorrectionScalar(const Pswf0& psi, double s)
@@ -479,15 +513,16 @@ void fitScalarOnInterval(double             lower,
     const double              half  = 0.5 * (upper - lower);
     const double              mid   = 0.5 * (upper + lower);
 
+    std::vector<double> xNodes(order);
     std::vector<double> samples(order);
     for (int i = 0; i < order; ++i)
     {
-        samples[i] = function(mid + half * nodes[i]);
+        xNodes[i]  = mid + half * nodes[i];
+        samples[i] = function(xNodes[i]);
     }
 
-    std::vector<double> monomialInT = chebSamplesToMonomial(samples);
-    std::vector<double> monomialInX = composeMonomialWithAffine(monomialInT, 1.0 / half, -mid / half);
-    const int trimmedOrder = truncateToTol(&monomialInX, tol);
+    std::vector<double> monomialInX  = samplesToMonomialAtNodes(xNodes, samples);
+    const int           trimmedOrder = truncateToTol(&monomialInX, tol);
 
     coefs->assign(trimmedOrder, 0.0);
     for (int j = 0; j < trimmedOrder; ++j)
@@ -495,6 +530,53 @@ void fitScalarOnInterval(double             lower,
         (*coefs)[j] = static_cast<real>(monomialInX[j]);
     }
     *polyOrderOut = trimmedOrder;
+}
+
+template<typename Function>
+void fitScalarOnIntervalAdaptive(double             lower,
+                                 double             upper,
+                                 int                maxOrder,
+                                 double             tol,
+                                 double             coefficientRelativeTol,
+                                 const Function&    function,
+                                 AlignedRealVector* coefs,
+                                 int*               polyOrderOut)
+{
+    GMX_ASSERT(maxOrder > 0, "Adaptive PSWF polynomial fit requires positive maximum order");
+    GMX_ASSERT(tol > 0.0, "Adaptive PSWF polynomial fit requires positive requested tolerance");
+    GMX_ASSERT(coefficientRelativeTol > 0.0,
+               "Adaptive PSWF polynomial fit requires positive coefficient tolerance");
+
+    const double              half       = 0.5 * (upper - lower);
+    const double              mid        = 0.5 * (upper + lower);
+    const std::vector<double> probeNodes = chebNodes(maxOrder);
+
+    std::vector<double> samples(maxOrder);
+    for (int i = 0; i < maxOrder; ++i)
+    {
+        samples[i] = function(mid + half * probeNodes[i]);
+    }
+
+    const int order = adaptiveOrderFromChebCoefficients(chebCoefficientsFromSamples(samples),
+                                                        coefficientRelativeTol);
+
+    const std::vector<double> fitNodes = chebNodes(order);
+    std::vector<double>       xNodes(order);
+    samples.resize(order);
+    for (int i = 0; i < order; ++i)
+    {
+        xNodes[i]  = mid + half * fitNodes[i];
+        samples[i] = function(xNodes[i]);
+    }
+
+    std::vector<double> monomialInX = samplesToMonomialAtNodes(xNodes, samples);
+
+    coefs->assign(order, 0.0);
+    for (int j = 0; j < order; ++j)
+    {
+        (*coefs)[j] = static_cast<real>(monomialInX[j]);
+    }
+    *polyOrderOut = order;
 }
 
 struct Prolc180Calibration
@@ -688,25 +770,28 @@ void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, A
     std::vector<std::vector<double>> perStencilCoefficients(P);
     int                              globalPolyOrder = 0;
     const std::vector<double>        chebNodesInT    = chebNodes(kInitialOrder);
+    std::vector<double>              xNodes(kInitialOrder);
+    for (int i = 0; i < kInitialOrder; ++i)
+    {
+        xNodes[i] = 0.5 * (chebNodesInT[i] + 1.0);
+    }
 
     for (int k = 0; k < P; ++k)
     {
         std::vector<double> samples(kInitialOrder);
         for (int i = 0; i < kInitialOrder; ++i)
         {
-            const double t             = chebNodesInT[i];
-            const double x             = 0.5 * (t + 1.0);
+            const double x             = xNodes[i];
             const int    tkmBasisIndex = P - k - 1;
             const double s             = (x - 0.5 * static_cast<double>(P) + tkmBasisIndex)
                              / (0.5 * static_cast<double>(P));
             samples[i] = psi.eval(s);
         }
 
-        std::vector<double> monomialInT = chebSamplesToMonomial(samples);
-        std::vector<double> monomial    = composeMonomialWithAffine(monomialInT, 2.0, -1.0);
-        const int           order       = truncateToTol(&monomial, tol);
-        globalPolyOrder                 = std::max(globalPolyOrder, order);
-        perStencilCoefficients[k]       = std::move(monomial);
+        std::vector<double> monomial = samplesToMonomialAtNodes(xNodes, samples);
+        const int           order    = truncateToTol(&monomial, tol);
+        globalPolyOrder              = std::max(globalPolyOrder, order);
+        perStencilCoefficients[k]    = std::move(monomial);
     }
 
     coefs->assign(static_cast<std::size_t>(globalPolyOrder) * P_padded, 0.0);
@@ -730,16 +815,16 @@ void spreadFourierPoly(double tol, double r_tol, double c_w, AlignedRealVector* 
 
     constexpr int             kInitialOrder = 32;
     const std::vector<double> nodes         = chebNodes(kInitialOrder);
+    std::vector<double>       sNodes(kInitialOrder);
     std::vector<double>       samples(kInitialOrder);
     for (int i = 0; i < kInitialOrder; ++i)
     {
-        const double s = 0.5 * (nodes[i] + 1.0);
-        samples[i]     = lambda * psi.eval(s);
+        sNodes[i]  = 0.5 * (nodes[i] + 1.0);
+        samples[i] = lambda * psi.eval(sNodes[i]);
     }
 
-    std::vector<double> monomialInT = chebSamplesToMonomial(samples);
-    std::vector<double> monomial    = composeMonomialWithAffine(monomialInT, 2.0, -1.0);
-    const int           order       = truncateToTol(&monomial, tol);
+    std::vector<double> monomial = samplesToMonomialAtNodes(sNodes, samples);
+    const int           order    = truncateToTol(&monomial, tol);
 
     coefs->assign(order, 0.0);
     for (int j = 0; j < order; ++j)
@@ -751,24 +836,34 @@ void spreadFourierPoly(double tol, double r_tol, double c_w, AlignedRealVector* 
 
 void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
 {
-    (void)tol;
-    (void)r_tol;
     GMX_ASSERT(c > 0.0, "shortRangeForcePoly: c must be positive");
 
     const Pswf0 psi(c);
-    fitScalarOnInterval(
-            0.0, 1.0, 16, 0.0, [&](double s) { return longRangeForceCorrectionScalar(psi, s); }, coefs, polyOrderOut);
+    fitScalarOnIntervalAdaptive(
+            0.0,
+            1.0,
+            40,
+            tol,
+            r_tol,
+            [&](double s) { return longRangeForceCorrectionScalar(psi, s); },
+            coefs,
+            polyOrderOut);
 }
 
 void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
 {
-    (void)tol;
-    (void)r_tol;
     GMX_ASSERT(c > 0.0, "shortRangeEnergyPoly: c must be positive");
 
     const Pswf0 psi(c);
-    fitScalarOnInterval(
-            0.0, 1.0, 16, 0.0, [&](double s) { return longRangeEnergyCorrectionScalar(psi, s); }, coefs, polyOrderOut);
+    fitScalarOnIntervalAdaptive(
+            0.0,
+            1.0,
+            40,
+            tol,
+            r_tol,
+            [&](double s) { return longRangeEnergyCorrectionScalar(psi, s); },
+            coefs,
+            polyOrderOut);
 }
 
 void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)

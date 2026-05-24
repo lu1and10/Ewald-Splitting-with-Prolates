@@ -163,7 +163,8 @@
         /* Electrostatic interactions, frcoul =  qi*qj*(1/r - fsub)*r */
         if constexpr (!calculateEnergies)
         {
-            frCoulombV = coulombCalculator.template force<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+            frCoulombV = coulombCalculator.template force<c_espForcePolyOrder, nR>(
+                    rSquaredV, rInvV, rInvExclV, withinCutoffV);
 
             frCoulombV = genArr<nR>([&](int i) { return qqV[i] * frCoulombV[i]; });
         }
@@ -172,7 +173,7 @@
             // The potential (RF or Ewald reciprocal) we need to subtract from 1/r
             std::array<SimdReal, nR> vCoulombCorrectionV;
 
-            coulombCalculator.template forceAndCorrectionEnergy<nR>(
+            coulombCalculator.template forceAndCorrectionEnergy<c_espForcePolyOrder, c_espEnergyPolyOrder, nR>(
                     rSquaredV, rInvV, rInvExclV, withinCutoffV, frCoulombV, vCoulombCorrectionV);
 
             frCoulombV = genArr<nR>([&](int i) { return qqV[i] * frCoulombV[i]; });

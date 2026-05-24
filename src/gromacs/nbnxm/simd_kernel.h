@@ -167,12 +167,14 @@ template<KernelLayout         kernelLayout,
          LJCombinationRule    ljCombinationRule,
          InteractionModifiers vdwModifier,
          LJEwald              ljEwald,
-         EnergyOutput         energyOutput>
-void nbnxmKernelSimd(const NbnxmPairlistCpu&    pairlist,
-                     const nbnxm_atomdata_t&    nbat,
-                     const interaction_const_t& ic,
-                     const rvec*                shift_vec,
-                     nbnxm_atomdata_output_t*   out)
+         EnergyOutput         energyOutput,
+         int                  c_espForcePolyOrder,
+         int                  c_espEnergyPolyOrder>
+void nbnxmKernelSimdImpl(const NbnxmPairlistCpu&    pairlist,
+                         const nbnxm_atomdata_t&    nbat,
+                         const interaction_const_t& ic,
+                         const rvec*                shift_vec,
+                         nbnxm_atomdata_output_t*   out)
 {
     constexpr int c_numJClustersPerSimdRegister = (kernelLayout == KernelLayout::r2xMM ? 2 : 1);
 
@@ -551,6 +553,23 @@ void nbnxmKernelSimd(const NbnxmPairlistCpu&    pairlist,
 #ifdef COUNT_PAIRS
     printf("atom pairs %d\n", npair);
 #endif
+}
+
+template<KernelLayout         kernelLayout,
+         KernelCoulombType    coulombType,
+         VdwCutoffCheck       vdwCutoffCheck,
+         LJCombinationRule    ljCombinationRule,
+         InteractionModifiers vdwModifier,
+         LJEwald              ljEwald,
+         EnergyOutput         energyOutput>
+void nbnxmKernelSimd(const NbnxmPairlistCpu&    pairlist,
+                     const nbnxm_atomdata_t&    nbat,
+                     const interaction_const_t& ic,
+                     const rvec*                shift_vec,
+                     nbnxm_atomdata_output_t*   out)
+{
+    return nbnxmKernelSimdImpl<kernelLayout, coulombType, vdwCutoffCheck, ljCombinationRule, vdwModifier, ljEwald, energyOutput, 0, 0>(
+            pairlist, nbat, ic, shift_vec, out);
 }
 
 } // namespace gmx

@@ -27,6 +27,12 @@
 #include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/real.h"
 
+#if GMX_HAVE_NBNXM_SIMD_2XMM
+#    define INCLUDE_KERNELFUNCTION_TABLES
+#    include "gromacs/nbnxm/kernels_simd_2xmm/kernels.h"
+#    undef INCLUDE_KERNELFUNCTION_TABLES
+#endif
+
 namespace gmx::test
 {
 namespace
@@ -135,6 +141,46 @@ void expectCalculatorMatchesScalarReference(const interaction_const_t& ic)
     }
 }
 
+void expectFixedOrderCalculatorMatchesScalarReference(const interaction_const_t& ic)
+{
+    CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
+
+    const std::vector<real>       rValues       = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
+    const auto                    rV            = loadLaneValues(rValues);
+    const std::array<SimdReal, 1> rSquaredV     = { rV * rV };
+    const std::array<SimdReal, 1> rInvV         = { inv(rV) };
+    const std::array<SimdReal, 1> rInvExclV     = rInvV;
+    const std::array<SimdBool, 1> withinCutoffV = { rSquaredV[0]
+                                                    < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff) };
+
+    const std::array<SimdReal, 1> fixedOrderForceV =
+            calculator.force<6, 1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+    std::array<SimdReal, 1> forceAndEnergyForceV;
+    std::array<SimdReal, 1> correctionEnergyV;
+    calculator.forceAndCorrectionEnergy<6, 8, 1>(
+            rSquaredV, rInvV, rInvExclV, withinCutoffV, forceAndEnergyForceV, correctionEnergyV);
+
+    const std::vector<real> fixedOrderForce     = storeLaneValues(fixedOrderForceV[0]);
+    const std::vector<real> forceAndEnergyForce = storeLaneValues(forceAndEnergyForceV[0]);
+    const std::vector<real> correctionEnergy    = storeLaneValues(correctionEnergyV[0]);
+
+    for (int lane = 0; lane < GMX_SIMD_REAL_WIDTH; ++lane)
+    {
+        const real r = rValues[lane % rValues.size()];
+        const real s = r / ic.esp.cutoff;
+
+        const real expectedForce =
+                evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r + 1.0_real / r;
+        const real expectedEnergy =
+                evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / r
+                - ic.coulomb.ewaldShift;
+
+        EXPECT_NEAR(fixedOrderForce[lane], expectedForce, 5e-6_real) << "lane=" << lane;
+        EXPECT_NEAR(forceAndEnergyForce[lane], expectedForce, 5e-6_real) << "lane=" << lane;
+        EXPECT_NEAR(correctionEnergy[lane], expectedEnergy, 5e-6_real) << "lane=" << lane;
+    }
+}
+
 TEST(EspShortRangeCoulombCalculator, SelfEnergyUsesEspSelfCoeff)
 {
     const interaction_const_t                             ic(makeEspInteractionConst());
@@ -159,10 +205,42 @@ TEST(EspShortRangeCoulombCalculator, HighSpecializedOrderPolynomialsMatchScalarR
     expectCalculatorMatchesScalarReference(makeEspInteractionConstWithPolynomialOrders(24, 21));
 }
 
+TEST(EspShortRangeCoulombCalculator, FixedOrderApiMatchesScalarReference)
+{
+    expectFixedOrderCalculatorMatchesScalarReference(makeEspInteractionConstWithPolynomialOrders(6, 8));
+}
+
 TEST(EspShortRangeCoulombCalculator, RuntimeFallbackAboveSpecializedOrderMatchesScalarReference)
 {
     expectCalculatorMatchesScalarReference(makeEspInteractionConstWithPolynomialOrders(32, 28));
 }
+
+#if GMX_HAVE_NBNXM_SIMD_2XMM
+TEST(EspShortRangeCoulombCalculator, KernelSelectorUsesFinalOrderSpecializations)
+{
+    const int coulkt = static_cast<int>(CoulombKernelType::Ewald);
+    const int vdwkt  = vdwktLJCUT_COMBNONE;
+
+    EXPECT_EQ(selectNbnxmKernelNoenerEspSimd2xmm(coulkt, vdwkt, 12),
+              nbnxmKernelNoenerEspForceOrderSimd2xmm[0][12 - c_nbnxmEspSpecializedForceOrderMin2xmm][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelNoenerEspSimd2xmm(coulkt, vdwkt, 25),
+              nbnxmKernelNoenerEspRuntimeOrderSimd2xmm[0][vdwkt]);
+
+    EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 11, 13),
+              nbnxmKernelEnerEspMeasuredOrderPairSimd2xmm[0][2][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 12, 13),
+              nbnxmKernelEnerEspEnergyOrderSimd2xmm[0][13 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 25, 25),
+              nbnxmKernelEnerEspRuntimeOrderSimd2xmm[0][vdwkt]);
+
+    EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 11, 13),
+              nbnxmKernelEnergrpEspMeasuredOrderPairSimd2xmm[0][2][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 12, 13),
+              nbnxmKernelEnergrpEspEnergyOrderSimd2xmm[0][13 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 25, 25),
+              nbnxmKernelEnergrpEspRuntimeOrderSimd2xmm[0][vdwkt]);
+}
+#endif
 
 TEST(EspShortRangeCoulombCalculator, ForceSubtractsLongRangeCorrection)
 {

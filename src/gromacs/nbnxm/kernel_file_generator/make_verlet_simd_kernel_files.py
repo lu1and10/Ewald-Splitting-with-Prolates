@@ -157,7 +157,253 @@ VerletKernelTypeDict = {
     },
 }
 
+EspAnalyticalElectrostatics = ("ElecEw", "ElecEwTwinCut")
+EspSpecializedForceOrders = range(6, 23)
+EspSpecializedEnergyOrders = range(8, 23)
+EspMeasuredOrderPairs = (
+    (6, 8),
+    (9, 10),
+    (11, 13),
+    (14, 15),
+    (16, 16),
+    (18, 19),
+    (21, 21),
+)
+
 KernelsHeaderTemplate = read_kernel_template("kernel_simd_template.h.pre")
+
+
+def make_kernel_name(kernel_name_prefix, type, elec, ljtreat, ener):
+    return "{0}<{1}, {2}, {3}, {4}>".format(
+        kernel_name_prefix,
+        VerletKernelTypeDict[type]["param"],
+        ElectrostaticsDict[elec]["param"],
+        VdwTreatmentDict[ljtreat]["param"],
+        EnergiesComputationDict[ener]["param"],
+    )
+
+
+def make_kernel_impl_name(type, elec, ljtreat, ener, force_order, energy_order):
+    return "nbnxmKernelSimdImpl<{0}, {1}, {2}, {3}, {4}, {5}>".format(
+        VerletKernelTypeDict[type]["param"],
+        ElectrostaticsDict[elec]["param"],
+        VdwTreatmentDict[ljtreat]["param"],
+        EnergiesComputationDict[ener]["param"],
+        force_order,
+        energy_order,
+    )
+
+
+def make_explicit_instantiation(kernel_name):
+    text = "template void\n"
+    text += "{0}(\n".format(kernel_name)
+    text += "        const NbnxnPairlistCpu&    pairlist,\n"
+    text += "        const nbnxn_atomdata_t&    nbat,\n"
+    text += "        const interaction_const_t& ic,\n"
+    text += "        const rvec*                shift_vec,\n"
+    text += "        nbnxn_atomdata_output_t*   out);\n\n"
+    return text
+
+
+def make_esp_explicit_instantiations(type, elec, ljtreat, ener):
+    if elec not in EspAnalyticalElectrostatics:
+        return ""
+
+    order_pairs = []
+    if ener == "F":
+        order_pairs = [(order, 0) for order in EspSpecializedForceOrders]
+        order_pairs.append((-1, 0))
+    else:
+        order_pairs = list(EspMeasuredOrderPairs)
+        order_pairs.extend((-1, order) for order in EspSpecializedEnergyOrders)
+        order_pairs.append((-1, -1))
+
+    text = ""
+    for force_order, energy_order in order_pairs:
+        text += make_explicit_instantiation(
+            make_kernel_impl_name(type, elec, ljtreat, ener, force_order, energy_order)
+        )
+    return "\n\n" + text.rstrip("\n")
+
+
+def make_esp_order_table(type, table_name, ener, order_pairs):
+    text = "static NbnxmKernelFunc* const {0}{1}[2][{2}][vdwktNR] = {{\n".format(
+        table_name, type, len(order_pairs)
+    )
+    for elec in EspAnalyticalElectrostatics:
+        text += "    {\n"
+        for force_order, energy_order in order_pairs:
+            text += "        {\n"
+            for ljtreat in VdwTreatmentDict:
+                text += "            {0},\n".format(
+                    make_kernel_impl_name(
+                        type, elec, ljtreat, ener, force_order, energy_order
+                    )
+                )
+            text += "        },\n"
+        text += "    },\n"
+    text += "};\n\n"
+    return text
+
+
+def make_esp_runtime_order_table(type, table_name, ener, force_order, energy_order):
+    text = "static NbnxmKernelFunc* const {0}{1}[2][vdwktNR] = {{\n".format(
+        table_name, type
+    )
+    for elec in EspAnalyticalElectrostatics:
+        text += "    {\n"
+        for ljtreat in VdwTreatmentDict:
+            text += "        {0},\n".format(
+                make_kernel_impl_name(
+                    type, elec, ljtreat, ener, force_order, energy_order
+                )
+            )
+        text += "    },\n"
+    text += "};\n\n"
+    return text
+
+
+def make_esp_order_tables(type):
+    force_orders = [(order, 0) for order in EspSpecializedForceOrders]
+    energy_orders = [(-1, order) for order in EspSpecializedEnergyOrders]
+
+    text = "static constexpr int c_nbnxmEspSpecializedForceOrderMin{0} = {1};\n".format(
+        type, min(EspSpecializedForceOrders)
+    )
+    text += (
+        "static constexpr int c_nbnxmEspSpecializedForceOrderMax{0} = {1};\n".format(
+            type, max(EspSpecializedForceOrders)
+        )
+    )
+    text += (
+        "static constexpr int c_nbnxmEspSpecializedEnergyOrderMin{0} = {1};\n".format(
+            type, min(EspSpecializedEnergyOrders)
+        )
+    )
+    text += (
+        "static constexpr int c_nbnxmEspSpecializedEnergyOrderMax{0} = {1};\n\n".format(
+            type, max(EspSpecializedEnergyOrders)
+        )
+    )
+
+    text += (
+        "static int nbnxmEspAnalyticalCoulombKernelIndex{0}(const int coulkt)\n".format(
+            type
+        )
+    )
+    text += "{\n"
+    text += "    switch (static_cast<CoulombKernelType>(coulkt))\n"
+    text += "    {\n"
+    text += "        case CoulombKernelType::Ewald: return 0;\n"
+    text += "        case CoulombKernelType::EwaldTwin: return 1;\n"
+    text += "        default: return -1;\n"
+    text += "    }\n"
+    text += "}\n\n"
+
+    text += "static int nbnxmEspMeasuredOrderPairIndex{0}(const int forceOrder, const int energyOrder)\n".format(
+        type
+    )
+    text += "{\n"
+    for index, pair in enumerate(EspMeasuredOrderPairs):
+        text += "    if (forceOrder == {0} && energyOrder == {1})\n".format(
+            pair[0], pair[1]
+        )
+        text += "    {\n"
+        text += "        return {0};\n".format(index)
+        text += "    }\n"
+    text += "    return -1;\n"
+    text += "}\n\n"
+
+    text += make_esp_order_table(
+        type, "nbnxmKernelNoenerEspForceOrderSimd", "F", force_orders
+    )
+    text += make_esp_runtime_order_table(
+        type, "nbnxmKernelNoenerEspRuntimeOrderSimd", "F", -1, 0
+    )
+    text += make_esp_order_table(
+        type, "nbnxmKernelEnerEspMeasuredOrderPairSimd", "VF", EspMeasuredOrderPairs
+    )
+    text += make_esp_order_table(
+        type, "nbnxmKernelEnerEspEnergyOrderSimd", "VF", energy_orders
+    )
+    text += make_esp_runtime_order_table(
+        type, "nbnxmKernelEnerEspRuntimeOrderSimd", "VF", -1, -1
+    )
+    text += make_esp_order_table(
+        type,
+        "nbnxmKernelEnergrpEspMeasuredOrderPairSimd",
+        "VgrpF",
+        EspMeasuredOrderPairs,
+    )
+    text += make_esp_order_table(
+        type, "nbnxmKernelEnergrpEspEnergyOrderSimd", "VgrpF", energy_orders
+    )
+    text += make_esp_runtime_order_table(
+        type, "nbnxmKernelEnergrpEspRuntimeOrderSimd", "VgrpF", -1, -1
+    )
+
+    text += "static NbnxmKernelFunc* selectNbnxmKernelNoenerEspSimd{0}(const int coulkt, const int vdwkt, const int forceOrder)\n".format(
+        type
+    )
+    text += "{\n"
+    text += "    const int coulombIndex = nbnxmEspAnalyticalCoulombKernelIndex{0}(coulkt);\n".format(
+        type
+    )
+    text += "    if (coulombIndex < 0)\n"
+    text += "    {\n"
+    text += "        return nbnxmKernelNoenerSimd{0}[coulkt][vdwkt];\n".format(type)
+    text += "    }\n"
+    text += "    if (forceOrder >= c_nbnxmEspSpecializedForceOrderMin{0} && forceOrder <= c_nbnxmEspSpecializedForceOrderMax{0})\n".format(
+        type
+    )
+    text += "    {\n"
+    text += "        return nbnxmKernelNoenerEspForceOrderSimd{0}[coulombIndex][forceOrder - c_nbnxmEspSpecializedForceOrderMin{0}][vdwkt];\n".format(
+        type
+    )
+    text += "    }\n"
+    text += "    return nbnxmKernelNoenerEspRuntimeOrderSimd{0}[coulombIndex][vdwkt];\n".format(
+        type
+    )
+    text += "}\n\n"
+
+    for kernel_kind in ("Ener", "Energrp"):
+        text += "static NbnxmKernelFunc* selectNbnxmKernel{0}EspSimd{1}(const int coulkt, const int vdwkt, const int forceOrder, const int energyOrder)\n".format(
+            kernel_kind, type
+        )
+        text += "{\n"
+        text += "    const int coulombIndex = nbnxmEspAnalyticalCoulombKernelIndex{0}(coulkt);\n".format(
+            type
+        )
+        text += "    if (coulombIndex < 0)\n"
+        text += "    {\n"
+        text += "        return nbnxmKernel{0}Simd{1}[coulkt][vdwkt];\n".format(
+            kernel_kind, type
+        )
+        text += "    }\n"
+        text += "    const int pairIndex = nbnxmEspMeasuredOrderPairIndex{0}(forceOrder, energyOrder);\n".format(
+            type
+        )
+        text += "    if (pairIndex >= 0)\n"
+        text += "    {\n"
+        text += "        return nbnxmKernel{0}EspMeasuredOrderPairSimd{1}[coulombIndex][pairIndex][vdwkt];\n".format(
+            kernel_kind, type
+        )
+        text += "    }\n"
+        text += "    if (energyOrder >= c_nbnxmEspSpecializedEnergyOrderMin{0} && energyOrder <= c_nbnxmEspSpecializedEnergyOrderMax{0})\n".format(
+            type
+        )
+        text += "    {\n"
+        text += "        return nbnxmKernel{0}EspEnergyOrderSimd{1}[coulombIndex][energyOrder - c_nbnxmEspSpecializedEnergyOrderMin{1}][vdwkt];\n".format(
+            kernel_kind, type
+        )
+        text += "    }\n"
+        text += "    return nbnxmKernel{0}EspRuntimeOrderSimd{1}[coulombIndex][vdwkt];\n".format(
+            kernel_kind, type
+        )
+        text += "}\n\n"
+
+    return text
+
 
 # For each Verlet kernel type, write two kinds of files:
 #   a header file defining the functions for all the kernels and
@@ -183,12 +429,8 @@ for type in VerletKernelTypeDict:
                 KernelFunctionLookupTable[ener] += "#    if GMX_USE_EXT_FMM\n"
             KernelFunctionLookupTable[ener] += "    {\n"
             for ljtreat in VdwTreatmentDict:
-                KernelName = "{0}<{1}, {2}, {3}, {4}>".format(
-                    KernelNamePrefix,
-                    VerletKernelTypeDict[type]["param"],
-                    ElectrostaticsDict[elec]["param"],
-                    VdwTreatmentDict[ljtreat]["param"],
-                    EnergiesComputationDict[ener]["param"],
+                KernelName = make_kernel_name(
+                    KernelNamePrefix, type, elec, ljtreat, ener
                 )
                 KernelFileName = "{0}_{1}_{2}_{3}".format(
                     KernelFileNamePrefix, elec, ljtreat, ener, type
@@ -212,6 +454,7 @@ for type in VerletKernelTypeDict:
                             VdwTreatmentDict[ljtreat]["param"],
                             EnergiesComputationDict[ener]["param"],
                             VerletKernelTypeDict[type]["define"],
+                            make_esp_explicit_instantiations(type, elec, ljtreat, ener),
                         )
                     )
 
@@ -237,6 +480,7 @@ for type in VerletKernelTypeDict:
                 KernelFunctionLookupTable["F"],
                 KernelFunctionLookupTable["VF"],
                 KernelFunctionLookupTable["VgrpF"],
+                make_esp_order_tables(type),
             )
         )
 

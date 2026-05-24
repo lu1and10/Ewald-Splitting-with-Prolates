@@ -53,7 +53,7 @@ nbnxmKernelSimd<{0}, {1}, {2}, {3}>(
         const nbnxm_atomdata_t&    nbat,
         const interaction_const_t& ic,
         const rvec*                shift_vec,
-        nbnxm_atomdata_output_t*   out);
+        nbnxm_atomdata_output_t*   out);{5}
 
 }} // namespace gmx
 

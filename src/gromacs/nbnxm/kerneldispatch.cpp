@@ -250,6 +250,34 @@ static void nbnxm_kernel_cpu(const PairlistSet&             pairlistSet,
 
     const auto* shiftVecPointer = as_rvec_array(shiftVectors.data());
 
+#if GMX_HAVE_NBNXM_SIMD_2XMM
+    NbnxmKernelFunc* noenerKernelSimd2xmm  = gmx::nbnxmKernelNoenerSimd2xmm[coulkt][vdwkt];
+    NbnxmKernelFunc* enerKernelSimd2xmm    = gmx::nbnxmKernelEnerSimd2xmm[coulkt][vdwkt];
+    NbnxmKernelFunc* energrpKernelSimd2xmm = gmx::nbnxmKernelEnergrpSimd2xmm[coulkt][vdwkt];
+    if (ic.coulomb.type == CoulombInteractionType::Esp)
+    {
+        noenerKernelSimd2xmm =
+                gmx::selectNbnxmKernelNoenerEspSimd2xmm(coulkt, vdwkt, ic.esp.forcePolyOrder);
+        enerKernelSimd2xmm = gmx::selectNbnxmKernelEnerEspSimd2xmm(
+                coulkt, vdwkt, ic.esp.forcePolyOrder, ic.esp.energyPolyOrder);
+        energrpKernelSimd2xmm = gmx::selectNbnxmKernelEnergrpEspSimd2xmm(
+                coulkt, vdwkt, ic.esp.forcePolyOrder, ic.esp.energyPolyOrder);
+    }
+#endif
+#if GMX_HAVE_NBNXM_SIMD_4XM
+    NbnxmKernelFunc* noenerKernelSimd4xm  = gmx::nbnxmKernelNoenerSimd4xm[coulkt][vdwkt];
+    NbnxmKernelFunc* enerKernelSimd4xm    = gmx::nbnxmKernelEnerSimd4xm[coulkt][vdwkt];
+    NbnxmKernelFunc* energrpKernelSimd4xm = gmx::nbnxmKernelEnergrpSimd4xm[coulkt][vdwkt];
+    if (ic.coulomb.type == CoulombInteractionType::Esp)
+    {
+        noenerKernelSimd4xm = gmx::selectNbnxmKernelNoenerEspSimd4xm(coulkt, vdwkt, ic.esp.forcePolyOrder);
+        enerKernelSimd4xm = gmx::selectNbnxmKernelEnerEspSimd4xm(
+                coulkt, vdwkt, ic.esp.forcePolyOrder, ic.esp.energyPolyOrder);
+        energrpKernelSimd4xm = gmx::selectNbnxmKernelEnergrpEspSimd4xm(
+                coulkt, vdwkt, ic.esp.forcePolyOrder, ic.esp.energyPolyOrder);
+    }
+#endif
+
     int gmx_unused nthreads = gmx_omp_nthreads_get(ModuleMultiThread::Nonbonded);
     wallcycle_sub_start(wcycle, WallCycleSubCounter::NonbondedClear);
 #pragma omp parallel for schedule(static) num_threads(nthreads)
@@ -285,14 +313,12 @@ static void nbnxm_kernel_cpu(const PairlistSet&             pairlistSet,
                     break;
 #if GMX_HAVE_NBNXM_SIMD_2XMM
                 case NbnxmKernelType::Cpu4xN_Simd_2xNN:
-                    gmx::nbnxmKernelNoenerSimd2xmm[coulkt][vdwkt](
-                            pairlist, *nbat, ic, shiftVecPointer, &out);
+                    noenerKernelSimd2xmm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
 #if GMX_HAVE_NBNXM_SIMD_4XM
                 case NbnxmKernelType::Cpu4xN_Simd_4xN:
-                    gmx::nbnxmKernelNoenerSimd4xm[coulkt][vdwkt](
-                            pairlist, *nbat, ic, shiftVecPointer, &out);
+                    noenerKernelSimd4xm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
                 case NbnxmKernelType::Cpu1x1_PlainC:
@@ -322,12 +348,12 @@ static void nbnxm_kernel_cpu(const PairlistSet&             pairlistSet,
                     break;
 #if GMX_HAVE_NBNXM_SIMD_2XMM
                 case NbnxmKernelType::Cpu4xN_Simd_2xNN:
-                    gmx::nbnxmKernelEnerSimd2xmm[coulkt][vdwkt](pairlist, *nbat, ic, shiftVecPointer, &out);
+                    enerKernelSimd2xmm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
 #if GMX_HAVE_NBNXM_SIMD_4XM
                 case NbnxmKernelType::Cpu4xN_Simd_4xN:
-                    gmx::nbnxmKernelEnerSimd4xm[coulkt][vdwkt](pairlist, *nbat, ic, shiftVecPointer, &out);
+                    enerKernelSimd4xm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
                 case NbnxmKernelType::Cpu1x1_PlainC:
@@ -363,14 +389,12 @@ static void nbnxm_kernel_cpu(const PairlistSet&             pairlistSet,
                     break;
 #if GMX_HAVE_NBNXM_SIMD_2XMM
                 case NbnxmKernelType::Cpu4xN_Simd_2xNN:
-                    gmx::nbnxmKernelEnergrpSimd2xmm[coulkt][vdwkt](
-                            pairlist, *nbat, ic, shiftVecPointer, &out);
+                    energrpKernelSimd2xmm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
 #if GMX_HAVE_NBNXM_SIMD_4XM
                 case NbnxmKernelType::Cpu4xN_Simd_4xN:
-                    gmx::nbnxmKernelEnergrpSimd4xm[coulkt][vdwkt](
-                            pairlist, *nbat, ic, shiftVecPointer, &out);
+                    energrpKernelSimd4xm(pairlist, *nbat, ic, shiftVecPointer, &out);
                     break;
 #endif
                 case NbnxmKernelType::Cpu1x1_PlainC:

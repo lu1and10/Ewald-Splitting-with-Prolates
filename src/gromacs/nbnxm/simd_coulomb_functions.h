@@ -103,6 +103,17 @@ public:
                           { return fma(rSquaredV[i], minusTwoTimesRFCoeff_, rInvExclV[i]); });
     }
 
+    //! Returns the force; ESP polynomial order arguments are ignored for RF.
+    template<int espForcePolyOrder, int nR>
+    gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>& rSquaredV,
+                                              const std::array<SimdReal, nR>& dummyRInvV,
+                                              const std::array<SimdReal, nR>& rInvExclV,
+                                              const std::array<SimdBool, nR>& withinCutoffV)
+    {
+        GMX_UNUSED_VALUE(espForcePolyOrder);
+        return force<nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
+    }
+
     //! Computes forces and energies without 1/r term for reaction-field
     template<int nR, std::size_t energySize>
     gmx_inline void forceAndCorrectionEnergy(const std::array<SimdReal, nR>&            rSquaredV,
@@ -117,6 +128,21 @@ public:
 
         const SimdReal factor = SimdReal(0.5_real) * minusTwoTimesRFCoeff_;
         correctionEnergyV = genArr<nR>([&](int i) { return fma(rSquaredV[i], factor, rfOffset_); });
+    }
+
+    //! Computes forces and energies; ESP polynomial order arguments are ignored for RF.
+    template<int espForcePolyOrder, int espEnergyPolyOrder, int nR, std::size_t energySize>
+    gmx_inline void forceAndCorrectionEnergy(const std::array<SimdReal, nR>&   rSquaredV,
+                                             const std::array<SimdReal, nR>&   dummyRInvV,
+                                             const std::array<SimdReal, nR>&   rInvExclV,
+                                             const std::array<SimdBool, nR>&   withinCutoffV,
+                                             std::array<SimdReal, nR>&         forceV,
+                                             std::array<SimdReal, energySize>& correctionEnergyV)
+    {
+        GMX_UNUSED_VALUE(espForcePolyOrder);
+        GMX_UNUSED_VALUE(espEnergyPolyOrder);
+        forceAndCorrectionEnergy<nR>(
+                rSquaredV, dummyRInvV, rInvExclV, withinCutoffV, forceV, correctionEnergyV);
     }
 
 private:
@@ -158,6 +184,15 @@ public:
     //! Returns the self energy
     inline real selfEnergy() const { return selfEnergy_; }
 
+    //! Whether this calculator evaluates ESP instead of standard Ewald.
+    inline bool useEsp() const { return useEsp_; }
+
+    //! ESP short-range force polynomial order.
+    inline int espForcePolyOrder() const { return espForcePolyOrder_; }
+
+    //! ESP short-range energy polynomial order.
+    inline int espEnergyPolyOrder() const { return espEnergyPolyOrder_; }
+
     static constexpr int sc_maxSpecializedEspShortRangePolyOrder = 24;
 
     //! Returns whether an ESP short-range polynomial order has a compile-time path.
@@ -172,9 +207,26 @@ public:
                                               const std::array<SimdReal, nR>& rInvExclV,
                                               const std::array<SimdBool, nR>& withinCutoffV)
     {
+        return force<0, nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
+    }
+
+    //! Returns the force, optionally using a compile-time ESP polynomial order.
+    template<int espForcePolyOrder, int nR>
+    gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>& rSquaredV,
+                                              const std::array<SimdReal, nR>& dummyRInvV,
+                                              const std::array<SimdReal, nR>& rInvExclV,
+                                              const std::array<SimdBool, nR>& withinCutoffV)
+    {
         if (useEsp_)
         {
-            return dispatchEspForce<nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
+            if constexpr (espForcePolyOrder != 0)
+            {
+                return espForce<espForcePolyOrder, nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
+            }
+            else
+            {
+                return dispatchEspForce<nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
+            }
         }
 
         const auto brsqV = genArr<nR>(
@@ -194,11 +246,40 @@ public:
                                              std::array<SimdReal, nR>&         forceV,
                                              std::array<SimdReal, energySize>& correctionEnergyV)
     {
+        forceAndCorrectionEnergy<0, 0, nR>(
+                rSquaredV, rInvV, rInvExclV, withinCutoffV, forceV, correctionEnergyV);
+    }
+
+    //! Computes force and correction energy, optionally using compile-time ESP polynomial orders.
+    template<int espForcePolyOrder, int espEnergyPolyOrder, int nR, std::size_t energySize>
+    gmx_inline void forceAndCorrectionEnergy(const std::array<SimdReal, nR>&   rSquaredV,
+                                             const std::array<SimdReal, nR>&   rInvV,
+                                             const std::array<SimdReal, nR>&   rInvExclV,
+                                             const std::array<SimdBool, nR>&   withinCutoffV,
+                                             std::array<SimdReal, nR>&         forceV,
+                                             std::array<SimdReal, energySize>& correctionEnergyV)
+    {
         if (useEsp_)
         {
-            forceV = dispatchEspForce<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
-            correctionEnergyV =
-                    dispatchEspCorrectionEnergy<nR, energySize>(rSquaredV, rInvV, withinCutoffV);
+            if constexpr (espForcePolyOrder != 0)
+            {
+                forceV = espForce<espForcePolyOrder, nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+            }
+            else
+            {
+                forceV = dispatchEspForce<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+            }
+
+            if constexpr (espEnergyPolyOrder != 0)
+            {
+                correctionEnergyV = espCorrectionEnergy<espEnergyPolyOrder, nR, energySize>(
+                        rSquaredV, rInvV, withinCutoffV);
+            }
+            else
+            {
+                correctionEnergyV =
+                        dispatchEspCorrectionEnergy<nR, energySize>(rSquaredV, rInvV, withinCutoffV);
+            }
             return;
         }
 
@@ -232,9 +313,8 @@ private:
             return value;
         }
 
-        // Negative orders are used only by nonbonded-benchmark to force the
-        // runtime Horner path with the same polynomial degree as the
-        // compile-time dispatch path.
+        // Negative template orders force a no-switch runtime Horner path with
+        // the same polynomial degree as the compile-time path.
         const int order = runtimeOrder > 0 ? runtimeOrder : -runtimeOrder;
         SimdReal  value(coefs[order - 1]);
         for (int i = order - 2; i >= 0; --i)
@@ -462,6 +542,17 @@ public:
         return forceV;
     }
 
+    //! Returns the force; ESP polynomial order arguments are ignored for tabulated Ewald.
+    template<int espForcePolyOrder, int nR>
+    gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>& rSquaredV,
+                                              const std::array<SimdReal, nR>& rInvV,
+                                              const std::array<SimdReal, nR>& rInvExclV,
+                                              const std::array<SimdBool, nR>& withinCutoffV)
+    {
+        GMX_UNUSED_VALUE(espForcePolyOrder);
+        return force<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+    }
+
     //! Computes the Coulomb force and the Ewald reciprocal pot correction energy
     template<int nR, std::size_t energySize>
     gmx_inline void forceAndCorrectionEnergy(const std::array<SimdReal, nR>& rSquaredV,
@@ -533,6 +624,20 @@ public:
                                (coulombTable0V[i] + forceCorrectionV[i]),
                                coulombTablePotV[i]);
                 });
+    }
+
+    //! Computes force and energy; ESP polynomial order arguments are ignored for tabulated Ewald.
+    template<int espForcePolyOrder, int espEnergyPolyOrder, int nR, std::size_t energySize>
+    gmx_inline void forceAndCorrectionEnergy(const std::array<SimdReal, nR>&   rSquaredV,
+                                             const std::array<SimdReal, nR>&   rInvV,
+                                             const std::array<SimdReal, nR>&   rInvExclV,
+                                             const std::array<SimdBool, nR>&   withinCutoffV,
+                                             std::array<SimdReal, nR>&         forceV,
+                                             std::array<SimdReal, energySize>& correctionEnergyV)
+    {
+        GMX_UNUSED_VALUE(espForcePolyOrder);
+        GMX_UNUSED_VALUE(espEnergyPolyOrder);
+        forceAndCorrectionEnergy<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV, forceV, correctionEnergyV);
     }
 
 private:

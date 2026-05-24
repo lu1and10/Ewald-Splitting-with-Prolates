@@ -36,6 +36,7 @@
 #include "gromacs/topology/atoms.h"
 #include "gromacs/topology/forcefieldparameters.h"
 #include "gromacs/topology/idef.h"
+#include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/basedefinitions.h"
 #include "gromacs/utility/enumerationhelpers.h"
@@ -1130,8 +1131,8 @@ static void doRealToKvt(gmx::ISerializer*               serializer,
     builder->addValue<real>(key, value);
 }
 
-static void serializeEspAlignedRealVector(gmx::ISerializer*           serializer,
-                                          gmx::esp::AlignedRealVector* v)
+static void serializeEspRealVector(gmx::ISerializer*                               serializer,
+                                   std::vector<real, gmx::AlignedAllocator<real>>* v)
 {
     int n = static_cast<int>(v->size());
     serializer->doInt(&n);
@@ -1973,20 +1974,20 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
             serializer->doInt(&ir->espParams.nz);
 
             serializer->doInt(&ir->espParams.poly_order);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.rho_coeff);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.drho_coeff);
+            serializeEspRealVector(serializer, &ir->espParams.rho_coeff);
+            serializeEspRealVector(serializer, &ir->espParams.drho_coeff);
 
             serializer->doInt(&ir->espParams.split_fourier_poly_order);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.split_fourier_poly);
+            serializeEspRealVector(serializer, &ir->espParams.split_fourier_poly);
 
             serializer->doInt(&ir->espParams.spread_fourier_poly_order);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.spread_fourier_poly);
+            serializeEspRealVector(serializer, &ir->espParams.spread_fourier_poly);
 
             serializer->doInt(&ir->espParams.short_range_force_poly_order);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.short_range_force_poly);
+            serializeEspRealVector(serializer, &ir->espParams.short_range_force_poly);
 
             serializer->doInt(&ir->espParams.short_range_energy_poly_order);
-            serializeEspAlignedRealVector(serializer, &ir->espParams.short_range_energy_poly);
+            serializeEspRealVector(serializer, &ir->espParams.short_range_energy_poly);
         }
     }
 

@@ -51,6 +51,9 @@
 
 namespace gmx::esp
 {
+
+using RealAlignedVector = std::vector<real, gmx::AlignedAllocator<real>>;
+
 namespace
 {
 
@@ -470,6 +473,16 @@ int truncateToTol(std::vector<double>* monomial, double tol)
     return order;
 }
 
+double evaluateMonomial(const std::vector<double>& monomial, double x)
+{
+    double value = monomial.back();
+    for (int i = static_cast<int>(monomial.size()) - 2; i >= 0; --i)
+    {
+        value = value * x + monomial[i];
+    }
+    return value;
+}
+
 double longRangeEnergyCorrectionScalar(const Pswf0& psi, double s)
 {
     return pswfSplitFunction(psi, 1.0, s);
@@ -501,13 +514,7 @@ double fourierLambda(const Pswf0& psi)
 }
 
 template<typename Function>
-void fitScalarOnInterval(double             lower,
-                         double             upper,
-                         int                order,
-                         double             tol,
-                         const Function&    function,
-                         AlignedRealVector* coefs,
-                         int*               polyOrderOut)
+std::vector<double> fitScalarMonomialOnInterval(double lower, double upper, int order, const Function& function)
 {
     const std::vector<double> nodes = chebNodes(order);
     const double              half  = 0.5 * (upper - lower);
@@ -521,15 +528,21 @@ void fitScalarOnInterval(double             lower,
         samples[i] = function(xNodes[i]);
     }
 
-    std::vector<double> monomialInX  = samplesToMonomialAtNodes(xNodes, samples);
-    const int           trimmedOrder = truncateToTol(&monomialInX, tol);
+    return samplesToMonomialAtNodes(xNodes, samples);
+}
 
-    coefs->assign(trimmedOrder, 0.0);
-    for (int j = 0; j < trimmedOrder; ++j)
+template<typename Function>
+double denseMaxAbsoluteFitError(double lower, double upper, const std::vector<double>& monomial, const Function& function)
+{
+    constexpr int c_numDenseSamples = 257;
+    double        maxError          = 0.0;
+    for (int i = 0; i < c_numDenseSamples; ++i)
     {
-        (*coefs)[j] = static_cast<real>(monomialInX[j]);
+        const double fraction = static_cast<double>(i) / static_cast<double>(c_numDenseSamples - 1);
+        const double x        = lower + fraction * (upper - lower);
+        maxError = std::max(maxError, std::abs(evaluateMonomial(monomial, x) - function(x)));
     }
-    *polyOrderOut = trimmedOrder;
+    return maxError;
 }
 
 template<typename Function>
@@ -539,7 +552,7 @@ void fitScalarOnIntervalAdaptive(double             lower,
                                  double             tol,
                                  double             coefficientRelativeTol,
                                  const Function&    function,
-                                 AlignedRealVector* coefs,
+                                 RealAlignedVector* coefs,
                                  int*               polyOrderOut)
 {
     GMX_ASSERT(maxOrder > 0, "Adaptive PSWF polynomial fit requires positive maximum order");
@@ -560,23 +573,27 @@ void fitScalarOnIntervalAdaptive(double             lower,
     const int order = adaptiveOrderFromChebCoefficients(chebCoefficientsFromSamples(samples),
                                                         coefficientRelativeTol);
 
-    const std::vector<double> fitNodes = chebNodes(order);
-    std::vector<double>       xNodes(order);
-    samples.resize(order);
-    for (int i = 0; i < order; ++i)
+    std::vector<double> monomialInX;
+    int                 acceptedOrder = 0;
+    for (int candidateOrder = order; candidateOrder <= maxOrder; ++candidateOrder)
     {
-        xNodes[i]  = mid + half * fitNodes[i];
-        samples[i] = function(xNodes[i]);
+        monomialInX = fitScalarMonomialOnInterval(lower, upper, candidateOrder, function);
+        if (denseMaxAbsoluteFitError(lower, upper, monomialInX, function) <= tol)
+        {
+            acceptedOrder = candidateOrder;
+            break;
+        }
     }
 
-    std::vector<double> monomialInX = samplesToMonomialAtNodes(xNodes, samples);
+    GMX_RELEASE_ASSERT(acceptedOrder > 0,
+                       "Adaptive PSWF polynomial fit did not meet requested tolerance");
 
-    coefs->assign(order, 0.0);
-    for (int j = 0; j < order; ++j)
+    coefs->assign(acceptedOrder, 0.0);
+    for (int j = 0; j < acceptedOrder; ++j)
     {
         (*coefs)[j] = static_cast<real>(monomialInX[j]);
     }
-    *polyOrderOut = order;
+    *polyOrderOut = acceptedOrder;
 }
 
 struct Prolc180Calibration
@@ -758,7 +775,7 @@ int estimateOrder(double tolerance)
     return order;
 }
 
-void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, AlignedRealVector* coefs, int* polyOrderOut)
+void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, RealAlignedVector* coefs, int* polyOrderOut)
 {
     (void)r_tol;
     GMX_ASSERT(P > 0 && P_padded >= P, "spreadRealPoly: invalid P or P_padded");
@@ -805,7 +822,7 @@ void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, A
     *polyOrderOut = globalPolyOrder;
 }
 
-void spreadFourierPoly(double tol, double r_tol, double c_w, AlignedRealVector* coefs, int* polyOrderOut)
+void spreadFourierPoly(double tol, double r_tol, double c_w, RealAlignedVector* coefs, int* polyOrderOut)
 {
     (void)r_tol;
     GMX_ASSERT(c_w > 0.0, "spreadFourierPoly: c_w must be positive");
@@ -834,7 +851,7 @@ void spreadFourierPoly(double tol, double r_tol, double c_w, AlignedRealVector* 
     *polyOrderOut = order;
 }
 
-void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
+void shortRangeForcePoly(double tol, double r_tol, double c, RealAlignedVector* coefs, int* polyOrderOut)
 {
     GMX_ASSERT(c > 0.0, "shortRangeForcePoly: c must be positive");
 
@@ -850,7 +867,7 @@ void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* 
             polyOrderOut);
 }
 
-void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
+void shortRangeEnergyPoly(double tol, double r_tol, double c, RealAlignedVector* coefs, int* polyOrderOut)
 {
     GMX_ASSERT(c > 0.0, "shortRangeEnergyPoly: c must be positive");
 
@@ -866,7 +883,7 @@ void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector*
             polyOrderOut);
 }
 
-void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut)
+void splitFourierPoly(double tol, double r_tol, double c, RealAlignedVector* coefs, int* polyOrderOut)
 {
     (void)r_tol;
     GMX_ASSERT(c > 0.0, "splitFourierPoly: c must be positive");

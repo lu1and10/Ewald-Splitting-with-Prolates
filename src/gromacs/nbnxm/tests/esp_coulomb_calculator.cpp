@@ -24,6 +24,7 @@
 #include "gromacs/nbnxm/simd_coulomb_functions.h"
 #include "gromacs/simd/simd.h"
 #include "gromacs/simd/simd_math.h"
+#include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/real.h"
 
 namespace gmx::test
@@ -48,7 +49,7 @@ std::vector<real> storeLaneValues(SimdReal value)
     return std::vector<real>(lanes.begin(), lanes.end());
 }
 
-real evaluatePolynomial(const gmx::esp::AlignedRealVector& coefs, int order, real s)
+real evaluatePolynomial(const std::vector<real, gmx::AlignedAllocator<real>>& coefs, int order, real s)
 {
     real value = coefs[order - 1];
     for (int i = order - 2; i >= 0; --i)

@@ -79,11 +79,6 @@ struct switch_consts_t
 template<typename T>
 using AlignedVector = std::vector<T, gmx::AlignedAllocator<T>>;
 
-namespace gmx::esp
-{
-using AlignedRealVector = std::vector<real, gmx::AlignedAllocator<real>>;
-} // namespace gmx::esp
-
 struct EspShortRangeParameters
 {
     //! ESP short-range cutoff r_c.
@@ -95,9 +90,9 @@ struct EspShortRangeParameters
     //! ESP self correction coefficient, -1/(r_c lambda_0).
     real selfCoeff = 0;
     //! Polynomial coefficients for the ESP short-range force.
-    gmx::esp::AlignedRealVector forcePolyCoeff;
+    std::vector<real, gmx::AlignedAllocator<real>> forcePolyCoeff;
     //! Polynomial coefficients for the ESP short-range energy.
-    gmx::esp::AlignedRealVector energyPolyCoeff;
+    std::vector<real, gmx::AlignedAllocator<real>> energyPolyCoeff;
     //! Order of the short-range force polynomial.
     int forcePolyOrder = 0;
     //! Order of the short-range energy polynomial.

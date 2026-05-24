@@ -44,10 +44,6 @@
 namespace gmx::esp
 {
 
-//! Vector type alias for SIMD-aligned real arrays used by ESP polynomial tables.
-//! Avoids dragging in gpu_utils/hostallocator.h transitively.
-using AlignedRealVector = std::vector<real, gmx::AlignedAllocator<real>>;
-
 /*! \brief First-order prolate spheroidal wave function psi_0^c on [-1, 1].
  *
  * Constructed from a bandlimit parameter c via a Legendre expansion. Outside
@@ -75,10 +71,10 @@ public:
     double evalIntegral(double upper) const;
 
 private:
-    double              c_;
-    double              lambda0_;
-    double              normalizationAt0_;
-    std::vector<double> legendreCoefficients_;
+    double                             c_;
+    double                             lambda0_;
+    double                             normalizationAt0_;
+    std::vector<double>                legendreCoefficients_;
     std::vector<std::array<double, 3>> recurrenceCoefficients_;
 };
 
@@ -95,29 +91,41 @@ double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);
 int estimateOrder(double tolerance);
 
 //! Real-space spreading window polynomial table, lane-major in the inner P axis.
-void spreadRealPoly(int                P,
-                    int                P_padded,
-                    double             tol,
-                    double             r_tol,
-                    double             c_w,
-                    AlignedRealVector* coefs,
-                    int*               polyOrderOut);
+void spreadRealPoly(int                                             P,
+                    int                                             P_padded,
+                    double                                          tol,
+                    double                                          r_tol,
+                    double                                          c_w,
+                    std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                    int*                                            polyOrderOut);
 
 //! Fourier-space raw 1D spreading window phihat_1D(s) on s in [0, 1].
-void spreadFourierPoly(double             tol,
-                       double             r_tol,
-                       double             c_w,
-                       AlignedRealVector* coefs,
-                       int*               polyOrderOut);
+void spreadFourierPoly(double                                          tol,
+                       double                                          r_tol,
+                       double                                          c_w,
+                       std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                       int*                                            polyOrderOut);
 
 //! Short-range force kernel d/dr [(1 - Phi_{r_c}(r)) / r] on [0, r_c].
-void shortRangeForcePoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut);
+void shortRangeForcePoly(double                                          tol,
+                         double                                          r_tol,
+                         double                                          c,
+                         std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                         int*                                            polyOrderOut);
 
 //! Short-range energy kernel (1 - Phi_{r_c}(r)) / r on [0, r_c].
-void shortRangeEnergyPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut);
+void shortRangeEnergyPoly(double                                          tol,
+                          double                                          r_tol,
+                          double                                          c,
+                          std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                          int*                                            polyOrderOut);
 
 //! Fourier-space chihat(arg), where arg = r_c * |q|.
-void splitFourierPoly(double tol, double r_tol, double c, AlignedRealVector* coefs, int* polyOrderOut);
+void splitFourierPoly(double                                          tol,
+                      double                                          r_tol,
+                      double                                          c,
+                      std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                      int*                                            polyOrderOut);
 
 } // namespace gmx::esp
 

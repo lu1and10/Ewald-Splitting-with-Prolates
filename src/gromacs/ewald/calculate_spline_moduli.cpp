@@ -41,6 +41,7 @@
 
 #include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
+#include "gromacs/utility/alignedallocator.h"
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/gmxassert.h"
@@ -210,12 +211,12 @@ std::array<std::vector<real>, 3> make_p3m_bspline_moduli(int nx, int ny, int nz,
 namespace
 {
 
-void make_pswf_modulus_1d(std::vector<real>*                 bspModAlpha,
-                          const gmx::esp::AlignedRealVector& spreadFourierPoly,
-                          int                                spreadPolyOrder,
-                          int                                P,
-                          real                               c1,
-                          int                                nAlpha)
+void make_pswf_modulus_1d(std::vector<real>*                                    bspModAlpha,
+                          const std::vector<real, gmx::AlignedAllocator<real>>& spreadFourierPoly,
+                          int                                                   spreadPolyOrder,
+                          int                                                   P,
+                          real                                                  c1,
+                          int                                                   nAlpha)
 {
     GMX_ASSERT(c1 > 0, "ESP moduli: bandlimit c1 must be positive");
     GMX_ASSERT(P > 0, "ESP moduli: stencil order P must be positive");
@@ -251,11 +252,7 @@ void make_pswf_modulus_1d(std::vector<real>*                 bspModAlpha,
 
 } // namespace
 
-void make_pswf_moduli(std::array<std::vector<real>, DIM>* bspMod,
-                      const EspParameters&                 esp,
-                      int                                  nx,
-                      int                                  ny,
-                      int                                  nz)
+void make_pswf_moduli(std::array<std::vector<real>, DIM>* bspMod, const EspParameters& esp, int nx, int ny, int nz)
 {
     make_pswf_modulus_1d(
             &(*bspMod)[XX], esp.spread_fourier_poly, esp.spread_fourier_poly_order, esp.P, esp.c1, nx);

@@ -46,12 +46,16 @@
 
 #include <gtest/gtest.h>
 
+#include "gromacs/utility/alignedallocator.h"
+
 #include "testutils/testfilemanager.h"
 
 namespace gmx::esp::test
 {
 namespace
 {
+
+using RealAlignedVector = std::vector<real, gmx::AlignedAllocator<real>>;
 
 double longRangeEnergyCorrectionReference(const Pswf0& psi, double r)
 {
@@ -91,7 +95,7 @@ double splitFourierReference(const Pswf0& psi, double arg)
     return fourierLambdaReference(psi) * psi.eval(arg / psi.c()) / c0;
 }
 
-double splitFourierPolynomialValue(const AlignedRealVector& coefs,
+double splitFourierPolynomialValue(const RealAlignedVector& coefs,
                                    const int                polyOrder,
                                    const double             arg,
                                    const double             bandlimit)
@@ -105,7 +109,7 @@ double splitFourierPolynomialValue(const AlignedRealVector& coefs,
     return value;
 }
 
-double polynomialValue(const AlignedRealVector& coefs, const int polyOrder, const double x)
+double polynomialValue(const RealAlignedVector& coefs, const int polyOrder, const double x)
 {
     double value = coefs[polyOrder - 1];
     for (int l = polyOrder - 2; l >= 0; --l)
@@ -269,7 +273,7 @@ TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
     constexpr int    pPadded = 8;
     constexpr double cWindow = 12.024;
 
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     spreadRealPoly(p, pPadded, 1e-5, 1e-6, cWindow, &coefs, &polyOrder);
 
@@ -301,7 +305,7 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
     constexpr int p       = 5;
     constexpr int pPadded = 8;
 
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     spreadRealPoly(p, pPadded, 1e-4, 1e-5, 9.5392, &coefs, &polyOrder);
 
@@ -316,7 +320,7 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
 
 TEST(SpreadFourierPoly, AtZeroMatchesRawFourierWindow)
 {
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     spreadFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -327,7 +331,7 @@ TEST(SpreadFourierPoly, AtZeroMatchesRawFourierWindow)
 
 TEST(SpreadFourierPoly, MatchesRawFourierWindowAt03)
 {
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     spreadFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -346,7 +350,7 @@ TEST(SpreadFourierPoly, MatchesRawFourierWindowAt03)
 
 TEST(SplitFourierPoly, MatchesChiHatAt05)
 {
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     splitFourierPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -362,7 +366,7 @@ TEST(SplitFourierPoly, MatchesChiHatAt05)
 TEST(SplitFourierPoly, MatchesLammpsFourierKernelConvention)
 {
     constexpr double  c = 12.024;
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     splitFourierPoly(1e-5, 1e-6, c, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -378,7 +382,7 @@ TEST(SplitFourierPoly, MatchesLammpsFourierKernelConvention)
 TEST(SplitFourierPoly, MatchesChiHatNearBandlimit)
 {
     constexpr double  c = 12.024;
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     splitFourierPoly(1e-5, 1e-6, c, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -393,7 +397,7 @@ TEST(SplitFourierPoly, MatchesChiHatNearBandlimit)
 
 TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)
 {
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     shortRangeEnergyPoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -408,7 +412,7 @@ TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)
 
 TEST(ShortRangeForcePoly, MatchesLongRangeForceCorrection)
 {
-    AlignedRealVector coefs;
+    RealAlignedVector coefs;
     int               polyOrder = 0;
     shortRangeForcePoly(1e-5, 1e-6, 12.024, &coefs, &polyOrder);
     ASSERT_GT(polyOrder, 0);
@@ -423,8 +427,8 @@ TEST(ShortRangeForcePoly, MatchesLongRangeForceCorrection)
 
 TEST(ShortRangePoly, TightToleranceRaisesAdaptiveOrderPastLegacyCap)
 {
-    AlignedRealVector looseCoefs;
-    AlignedRealVector tightCoefs;
+    RealAlignedVector looseCoefs;
+    RealAlignedVector tightCoefs;
     int               looseOrder = 0;
     int               tightOrder = 0;
 
@@ -437,8 +441,8 @@ TEST(ShortRangePoly, TightToleranceRaisesAdaptiveOrderPastLegacyCap)
 
 TEST(ShortRangePoly, TightToleranceMatchesDenseReferenceSamples)
 {
-    AlignedRealVector forceCoefs;
-    AlignedRealVector energyCoefs;
+    RealAlignedVector forceCoefs;
+    RealAlignedVector energyCoefs;
     int               forceOrder  = 0;
     int               energyOrder = 0;
 
@@ -458,6 +462,28 @@ TEST(ShortRangePoly, TightToleranceMatchesDenseReferenceSamples)
         EXPECT_NEAR(polynomialValue(energyCoefs, energyOrder, r), longRangeEnergyCorrectionReference(psi, r), tolerance)
                 << "energy r=" << r << " order=" << energyOrder;
     }
+}
+
+TEST(ShortRangePoly, RequestedToleranceBoundsDenseSamplesWithLooseCoefficientCutoff)
+{
+    RealAlignedVector forceCoefs;
+    int               forceOrder = 0;
+
+    constexpr double c         = 14.471;
+    constexpr double tolerance = 1e-4;
+    shortRangeForcePoly(tolerance, 1e-1, c, &forceCoefs, &forceOrder);
+
+    const Pswf0 psi(c);
+    double      maxError = 0.0;
+    for (int i = 1; i < 128; ++i)
+    {
+        const double r     = static_cast<double>(i) / 128.0;
+        const double error = std::abs(polynomialValue(forceCoefs, forceOrder, r)
+                                      - longRangeForceCorrectionReference(psi, r));
+        maxError           = std::max(maxError, error);
+    }
+
+    EXPECT_LE(maxError, tolerance);
 }
 
 } // namespace

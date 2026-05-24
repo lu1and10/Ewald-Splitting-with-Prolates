@@ -64,11 +64,6 @@ class KeyValueTreeObject;
 struct MtsLevel;
 } // namespace gmx
 
-namespace gmx::esp
-{
-using AlignedRealVector = std::vector<real, gmx::AlignedAllocator<real>>;
-} // namespace gmx::esp
-
 struct EspUserSettings
 {
     //! Target relative force accuracy epsilon (mdp esp-accuracy).
@@ -102,17 +97,17 @@ struct EspParameters
     //! FFT grid dimensions.
     int nx = 0, ny = 0, nz = 0;
 
-    gmx::esp::AlignedRealVector rho_coeff;
-    gmx::esp::AlignedRealVector drho_coeff;
-    int                         poly_order = 0;
-    gmx::esp::AlignedRealVector split_fourier_poly;
-    int                         split_fourier_poly_order = 0;
-    gmx::esp::AlignedRealVector spread_fourier_poly;
-    int                         spread_fourier_poly_order = 0;
-    gmx::esp::AlignedRealVector short_range_force_poly;
-    int                         short_range_force_poly_order = 0;
-    gmx::esp::AlignedRealVector short_range_energy_poly;
-    int                         short_range_energy_poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> rho_coeff;
+    std::vector<real, gmx::AlignedAllocator<real>> drho_coeff;
+    int                                            poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> split_fourier_poly;
+    int                                            split_fourier_poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> spread_fourier_poly;
+    int                                            spread_fourier_poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> short_range_force_poly;
+    int                                            short_range_force_poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> short_range_energy_poly;
+    int                                            short_range_energy_poly_order = 0;
 };
 
 struct t_grpopts

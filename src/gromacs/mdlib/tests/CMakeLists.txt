@@ -43,6 +43,7 @@ gmx_add_unit_test(MdlibUnitTest mdlib-test HARDWARE_DETECTION
         energydrifttracker.cpp
         energyoutput.cpp
         expanded.cpp
+        forcerec.cpp
         freeenergyparameters.cpp
         langevin.cpp
         langevintestdata.cpp

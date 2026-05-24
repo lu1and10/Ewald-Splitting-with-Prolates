@@ -153,12 +153,15 @@ EwaldCorrectionTables generateEwaldCorrectionTables(int    numPoints,
                                                     real   beta,
                                                     real_space_grid_contribution_computer v_lr);
 
-/*! \brief Construct ESP short-range force and potential tables from grompp polynomials.
+/*! \brief Construct ESP short-range force and potential tables from exact PSWF samples.
  *
- * The potential table stores \f$L(r)\f$ and the force table stores
- * \f$-r L'(r)\f$, matching the NBNXM "force times r" convention.
+ * The potential table stores the long-range real-space correction \f$V_lr(r)\f$
+ * and the force table stores \f$-V'_lr(r)\f$, matching the generic Ewald table
+ * convention used by NBNXM.
  */
-EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, int numPoints = 4096);
+EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, int numPoints, double tableScaling);
+
+EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, int numPoints);
 
 /*! \brief Compute scaling for the Ewald quadratic spline tables.
  *

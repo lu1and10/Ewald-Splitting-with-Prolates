@@ -18,57 +18,95 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/tables/forcetable.h"
+#include <cmath>
 
 #include <gtest/gtest.h>
 
+#include "gromacs/math/pswf.h"
 #include "gromacs/mdtypes/interaction_const.h"
+#include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/tables/forcetable.h"
 #include "gromacs/utility/real.h"
+
+#include "testutils/testasserts.h"
 
 namespace gmx::test
 {
 namespace
 {
 
-real evaluatePolynomial(const gmx::esp::AlignedRealVector& coefs, int order, real s)
+double exactEspTablePotential(const gmx::esp::Pswf0& psi, const double cutoff, const double r)
 {
-    real value = coefs[order - 1];
-    for (int i = order - 2; i >= 0; --i)
+    if (r == 0.0)
     {
-        value = value * s + coefs[i];
+        return 2.0 * psi.eval(0.0) / (psi.lambda0() * cutoff);
     }
-    return value;
+
+    return gmx::esp::pswfSplitFunction(psi, 1.0 / cutoff, r) / r;
 }
 
-TEST(EspShortRangeTable, MatchesPolynomial)
+interaction_const_t makeEspTableInteractionConst(const real ewaldCoeff, const real relativeTolerance)
 {
     interaction_const_t ic;
-    ic.esp.cutoff          = 2.0_real;
-    ic.esp.energyPolyOrder = 3;
-    ic.esp.energyPolyCoeff = { 1.0_real, -0.25_real, 0.125_real };
-    ic.esp.forcePolyOrder  = 3;
-    ic.esp.forcePolyCoeff  = { -1.0_real, 0.5_real, -0.125_real };
+    ic.coulomb.type          = CoulombInteractionType::Esp;
+    ic.coulomb.cutoff        = 2.0_real;
+    ic.coulomb.ewaldCoeff    = ewaldCoeff;
+    ic.vdw.type              = VanDerWaalsType::Cut;
+    ic.esp.cutoff            = ic.coulomb.cutoff;
+    ic.esp.relativeTolerance = relativeTolerance;
+    ic.esp.splitCoefficient =
+            static_cast<real>(gmx::esp::prolc180(static_cast<double>(relativeTolerance)));
+    return ic;
+}
 
-    const EwaldCorrectionTables table = generateEspShortRangeTable(ic, 17);
+TEST(EspShortRangeTable, SamplesExactPswfSplitFunction)
+{
+    interaction_const_t ic;
+    ic.esp.cutoff           = 2.0_real;
+    ic.esp.splitCoefficient = 6.0_real;
 
-    ASSERT_EQ(table.tableV.size(), 17U);
-    ASSERT_EQ(table.tableF.size(), 17U);
-    ASSERT_EQ(table.tableFDV0.size(), 17U * 4U);
-    EXPECT_NEAR(table.scale, 8.0_real, 1e-6_real);
+    const EwaldCorrectionTables table = generateEspShortRangeTable(ic, 65);
+    const gmx::esp::Pswf0       psi(ic.esp.splitCoefficient);
 
-    for (int i : { 0, 4, 8, 12, 16 })
+    ASSERT_EQ(table.tableV.size(), 65U);
+    ASSERT_EQ(table.tableF.size(), 65U);
+    ASSERT_EQ(table.tableFDV0.size(), 65U * 4U);
+    EXPECT_NEAR(table.scale, 32.0_real, 1e-6_real);
+
+    for (int i : { 0, 16, 32, 48, 64 })
     {
         const real r = i / table.scale;
-        const real s = r / ic.esp.cutoff;
-        EXPECT_NEAR(table.tableV[i],
-                    evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s)
-                            / ic.esp.cutoff,
-                    1e-6_real);
-        EXPECT_NEAR(table.tableF[i],
-                    -s * evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s)
-                            / ic.esp.cutoff,
-                    1e-6_real);
+        EXPECT_NEAR(table.tableV[i], exactEspTablePotential(psi, ic.esp.cutoff, r), 1e-6_real);
     }
+
+    for (int i = 0; i < 64; ++i)
+    {
+        EXPECT_REAL_EQ(table.tableFDV0[4 * i], table.tableF[i]);
+        EXPECT_REAL_EQ(table.tableFDV0[4 * i + 1], table.tableF[i + 1] - table.tableF[i]);
+        EXPECT_REAL_EQ(table.tableFDV0[4 * i + 2], table.tableV[i]);
+    }
+}
+
+TEST(EspShortRangeTable, SplineScaleDoesNotUsePmeEwaldCoeff)
+{
+    interaction_const_t lowPmeEwaldCoeff  = makeEspTableInteractionConst(0.5_real, 1e-4_real);
+    interaction_const_t highPmeEwaldCoeff = makeEspTableInteractionConst(5.0_real, 1e-4_real);
+
+    const real lowScale  = ewald_spline3_table_scale(lowPmeEwaldCoeff, true, false);
+    const real highScale = ewald_spline3_table_scale(highPmeEwaldCoeff, true, false);
+
+    EXPECT_REAL_EQ(lowScale, highScale);
+}
+
+TEST(EspShortRangeTable, SplineScaleTightensWithEspAccuracy)
+{
+    interaction_const_t loose = makeEspTableInteractionConst(0.5_real, 1e-2_real);
+    interaction_const_t tight = makeEspTableInteractionConst(0.5_real, 1e-6_real);
+
+    const real looseScale = ewald_spline3_table_scale(loose, true, false);
+    const real tightScale = ewald_spline3_table_scale(tight, true, false);
+
+    EXPECT_GT(tightScale, looseScale);
 }
 
 } // namespace

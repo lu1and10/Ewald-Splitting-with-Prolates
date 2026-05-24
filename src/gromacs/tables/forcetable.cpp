@@ -37,9 +37,12 @@
 
 #include <cmath>
 
+#include <algorithm>
+
 #include "gromacs/fileio/xvgr.h"
 #include "gromacs/math/functions.h"
 #include "gromacs/math/multidimarray.h"
+#include "gromacs/math/pswf.h"
 #include "gromacs/math/units.h"
 #include "gromacs/math/utilities.h"
 #include "gromacs/mdspan/extensions.h"
@@ -136,10 +139,10 @@ double v_lj_ewald_lr(double beta, double r)
     }
 }
 
-EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
-                                                    const double tableScaling,
-                                                    const real   beta,
-                                                    real_space_grid_contribution_computer v_lr)
+template<typename GridContributionComputer>
+static EwaldCorrectionTables generateEwaldCorrectionTablesImpl(const int    numPoints,
+                                                               const double tableScaling,
+                                                               GridContributionComputer&& v_lr)
 {
     real     tab_max;
     int      i, i_inrange;
@@ -147,10 +150,6 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
     gmx_bool bOutOfRange;
     double   v_r0, v_r1, v_inrange, vi, a0, a1, a2dx;
     double   x_r0;
-
-    /* This function is called using either v_ewald_lr or v_lj_ewald_lr as a function argument
-     * depending on whether we should create electrostatic or Lennard-Jones Ewald tables.
-     */
 
     if (numPoints < 2)
     {
@@ -188,7 +187,7 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
     {
         x_r0 = i * dx;
 
-        v_r0 = (*v_lr)(beta, x_r0);
+        v_r0 = v_lr(x_r0);
 
         if (!bOutOfRange)
         {
@@ -211,7 +210,7 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
         }
 
         /* Get the potential at table point i-1 */
-        v_r1 = (*v_lr)(beta, (i - 1) * dx);
+        v_r1 = v_lr((i - 1) * dx);
 
         if (v_r1 != v_r1 || v_r1 < -tab_max || v_r1 > tab_max)
         {
@@ -223,7 +222,7 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
             /* Calculate the average second derivative times dx over interval i-1 to i.
              * Using the function values at the end points and in the middle.
              */
-            a2dx = (v_r0 + v_r1 - 2 * (*v_lr)(beta, x_r0 - 0.5 * dx)) / (0.25 * dx);
+            a2dx = (v_r0 + v_r1 - 2 * v_lr(x_r0 - 0.5 * dx)) / (0.25 * dx);
             /* Set the derivative of the spline to match the difference in potential
              * over the interval plus the average effect of the quadratic term.
              * This is the essential step for minimizing the error in the force.
@@ -292,68 +291,178 @@ EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
     return tables;
 }
 
-static real evaluateEspShortRangePolynomial(const gmx::esp::AlignedRealVector& coefs,
-                                            const int                          order,
-                                            const real                         s)
+EwaldCorrectionTables generateEwaldCorrectionTables(const int    numPoints,
+                                                    const double tableScaling,
+                                                    const real   beta,
+                                                    real_space_grid_contribution_computer v_lr)
 {
-    GMX_ASSERT(order > 0, "ESP short-range polynomial order must be positive");
-    GMX_ASSERT(coefs.size() >= static_cast<size_t>(order),
-               "ESP short-range polynomial coefficient table is too small");
-
-    real value = coefs[order - 1];
-    for (int i = order - 2; i >= 0; --i)
-    {
-        value = value * s + coefs[i];
-    }
-    return value;
+    /* This function is called using either v_ewald_lr or v_lj_ewald_lr as a function argument
+     * depending on whether we should create electrostatic or Lennard-Jones Ewald tables.
+     */
+    return generateEwaldCorrectionTablesImpl(
+            numPoints, tableScaling, [=](const double r) { return (*v_lr)(beta, r); });
 }
 
-EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, const int numPoints)
+static double v_q_esp_lr(const gmx::esp::Pswf0& psi, const double cutoff, const double r)
+{
+    if (r == 0.0)
+    {
+        return 2.0 * psi.eval(0.0) / (psi.lambda0() * cutoff);
+    }
+
+    return gmx::esp::pswfSplitFunction(psi, 1.0 / cutoff, r) / r;
+}
+
+static double f_q_esp_lr(const gmx::esp::Pswf0& psi, const double cutoff, const double r)
+{
+    GMX_RELEASE_ASSERT(r > 0.0, "ESP table force is sampled away from the origin");
+
+    const double s          = r / cutoff;
+    const double phi        = gmx::esp::pswfSplitFunction(psi, 1.0 / cutoff, r);
+    const double c0         = 0.5 * psi.lambda0();
+    const double correction = s * psi.eval(s) / c0 - phi;
+    return -correction / (r * r);
+}
+
+static double interpolateTableForce(const EwaldCorrectionTables& table, const double r)
+{
+    const double rScaled = r * table.scale;
+    const int    index   = static_cast<int>(rScaled);
+    const double frac    = rScaled - index;
+
+    return (1.0 - frac) * table.tableF[index] + frac * table.tableF[index + 1];
+}
+
+static double interpolateTablePotential(const EwaldCorrectionTables& table, const double r)
+{
+    const double rScaled     = r * table.scale;
+    const int    index       = static_cast<int>(rScaled);
+    const double frac        = rScaled - index;
+    const double force       = interpolateTableForce(table, r);
+    const double halfSpacing = 0.5 / table.scale;
+
+    return table.tableV[index] - halfSpacing * frac * (table.tableF[index] + force);
+}
+
+EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic,
+                                                 const int                  numPoints,
+                                                 const double               tableScaling)
 {
     if (numPoints < 2)
     {
         gmx_fatal(FARGS, "Can not make an ESP short-range table with less than 2 points");
     }
-    GMX_ASSERT(ic.esp.cutoff > 0, "ESP short-range table requires a positive cutoff");
-    GMX_ASSERT(ic.esp.energyPolyOrder > 0 && ic.esp.forcePolyOrder > 0,
-               "ESP short-range table requires populated polynomials");
+    GMX_RELEASE_ASSERT(ic.esp.cutoff > 0, "ESP short-range table requires a positive cutoff");
+    GMX_RELEASE_ASSERT(ic.esp.splitCoefficient > 0,
+                       "ESP short-range table requires the PSWF split coefficient");
 
-    EwaldCorrectionTables tables;
-    tables.scale = static_cast<real>(numPoints - 1) / ic.esp.cutoff;
-    tables.tableF.resize(numPoints);
-    tables.tableV.resize(numPoints);
-    tables.tableFDV0.resize(numPoints * 4);
+    const gmx::esp::Pswf0 psi(ic.esp.splitCoefficient);
+    return generateEwaldCorrectionTablesImpl(numPoints,
+                                             tableScaling,
+                                             [&](const double r)
+                                             { return v_q_esp_lr(psi, ic.esp.cutoff, r); });
+}
 
-    const real invCutoff = 1.0_real / ic.esp.cutoff;
-    for (int i = 0; i < numPoints; ++i)
+EwaldCorrectionTables generateEspShortRangeTable(const interaction_const_t& ic, const int numPoints)
+{
+    GMX_RELEASE_ASSERT(ic.esp.cutoff > 0, "ESP short-range table requires a positive cutoff");
+
+    return generateEspShortRangeTable(ic, numPoints, static_cast<real>(numPoints - 1) / ic.esp.cutoff);
+}
+
+static bool espSplineTableMeetsTolerance(const interaction_const_t& ic, const double tableScale)
+{
+    const int tableSize = static_cast<int>(ic.esp.cutoff * tableScale) + 2;
+    if (tableSize < 3)
     {
-        const real r = static_cast<real>(i) / tables.scale;
-        const real s = r * invCutoff;
-
-        tables.tableV[i] = evaluateEspShortRangePolynomial(
-                                   ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s)
-                           * invCutoff;
-        tables.tableF[i] = -s
-                           * evaluateEspShortRangePolynomial(
-                                   ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s)
-                           * invCutoff;
+        return false;
     }
 
-    for (int i = 0; i < numPoints - 1; ++i)
+    const gmx::esp::Pswf0       psi(ic.esp.splitCoefficient);
+    const EwaldCorrectionTables table = generateEspShortRangeTable(ic, tableSize, tableScale);
+
+    double forceErrorSquared     = 0.0;
+    double forceNormSquared      = 0.0;
+    double potentialErrorSquared = 0.0;
+    double potentialNormSquared  = 0.0;
+    double totalWeight           = 0.0;
+
+    for (int i = 0; i < tableSize - 1; ++i)
     {
-        tables.tableFDV0[4 * i]     = tables.tableF[i];
-        tables.tableFDV0[4 * i + 1] = tables.tableF[i + 1] - tables.tableF[i];
-        tables.tableFDV0[4 * i + 2] = tables.tableV[i];
-        tables.tableFDV0[4 * i + 3] = 0.0_real;
+        for (const double fraction : { 0.25, 0.5, 0.75 })
+        {
+            const double r = (static_cast<double>(i) + fraction) / tableScale;
+            if (r >= ic.esp.cutoff)
+            {
+                continue;
+            }
+
+            const double exactForce           = f_q_esp_lr(psi, ic.esp.cutoff, r);
+            const double tableForce           = interpolateTableForce(table, r);
+            const double exactShortRangeForce = 1.0 / r - exactForce * r;
+            const double tableShortRangeForce = 1.0 / r - tableForce * r;
+
+            const double exactPotential = v_q_esp_lr(psi, ic.esp.cutoff, r);
+            const double tablePotential = interpolateTablePotential(table, r);
+
+            const double weight = r * r;
+            forceErrorSquared += weight * gmx::square(tableShortRangeForce - exactShortRangeForce);
+            forceNormSquared += weight * gmx::square(exactShortRangeForce);
+            potentialErrorSquared += weight * gmx::square(tablePotential - exactPotential);
+            potentialNormSquared += weight * gmx::square(exactPotential);
+            totalWeight += weight;
+        }
     }
 
-    const int lastPoint                = numPoints - 1;
-    tables.tableFDV0[4 * lastPoint]     = tables.tableF[lastPoint];
-    tables.tableFDV0[4 * lastPoint + 1] = -tables.tableF[lastPoint];
-    tables.tableFDV0[4 * lastPoint + 2] = tables.tableV[lastPoint];
-    tables.tableFDV0[4 * lastPoint + 3] = 0.0_real;
+    const double tolerance          = static_cast<double>(ic.esp.relativeTolerance);
+    const double invCutoff          = 1.0 / ic.esp.cutoff;
+    const double forceNormFloor     = totalWeight * gmx::square(invCutoff);
+    const double potentialNormFloor = totalWeight * gmx::square(invCutoff);
+    const double relativeForceError =
+            std::sqrt(forceErrorSquared / std::max(forceNormSquared, forceNormFloor));
+    const double relativePotentialError =
+            std::sqrt(potentialErrorSquared / std::max(potentialNormSquared, potentialNormFloor));
 
-    return tables;
+    return relativeForceError <= tolerance && relativePotentialError <= tolerance;
+}
+
+static double espSpline3TableScale(const interaction_const_t& ic)
+{
+    GMX_RELEASE_ASSERT(ic.esp.cutoff > 0, "ESP table scale requires a positive cutoff");
+    GMX_RELEASE_ASSERT(ic.esp.splitCoefficient > 0,
+                       "ESP table scale requires a positive split coefficient");
+    GMX_RELEASE_ASSERT(ic.esp.relativeTolerance > 0 && ic.esp.relativeTolerance < 1,
+                       "ESP table scale requires a relative tolerance in (0, 1)");
+
+    double lowScale  = 0.0;
+    double highScale = 8.0 * ic.esp.splitCoefficient / ic.esp.cutoff;
+    while (!espSplineTableMeetsTolerance(ic, highScale))
+    {
+        lowScale = highScale;
+        highScale *= 2.0;
+        GMX_RELEASE_ASSERT(highScale < 16384.0 / ic.esp.cutoff,
+                           "ESP table scale search exceeded the supported range");
+    }
+
+    for (int i = 0; i < 12; ++i)
+    {
+        const double midScale = 0.5 * (lowScale + highScale);
+        if (espSplineTableMeetsTolerance(ic, midScale))
+        {
+            highScale = midScale;
+        }
+        else
+        {
+            lowScale = midScale;
+        }
+    }
+
+    /* The search above controls the isolated table interpolation error. The
+     * production kernels consume single-precision tables and see discrete pair
+     * distributions, so keep empirical setup-time headroom.
+     */
+    constexpr double c_espTableScaleSafetyFactor = 4.0;
+    return c_espTableScaleSafetyFactor * highScale;
 }
 
 /* Returns the spacing for a function using the maximum of
@@ -401,16 +510,24 @@ real ewald_spline3_table_scale(const interaction_const_t& ic,
 
     if (generateCoulombTables)
     {
-        GMX_RELEASE_ASSERT(ic.coulomb.ewaldCoeff > 0, "The Ewald coefficient should be positive");
+        real sc_q;
+        if (usingEsp(ic.coulomb.type))
+        {
+            sc_q = espSpline3TableScale(ic);
+        }
+        else
+        {
+            GMX_RELEASE_ASSERT(ic.coulomb.ewaldCoeff > 0,
+                               "The Ewald coefficient should be positive");
 
-        double erf_x_d3 = 1.0522; /* max of (erf(x)/x)''' */
-        double etol;
-        real   sc_q;
+            double erf_x_d3 = 1.0522; /* max of (erf(x)/x)''' */
+            double etol;
 
-        /* Energy tolerance: 0.1 times the cut-off jump */
-        etol = 0.1 * std::erfc(ic.coulomb.ewaldCoeff * ic.coulomb.cutoff);
+            /* Energy tolerance: 0.1 times the cut-off jump */
+            etol = 0.1 * std::erfc(ic.coulomb.ewaldCoeff * ic.coulomb.cutoff);
 
-        sc_q = spline3_table_scale(erf_x_d3, ic.coulomb.ewaldCoeff, etol);
+            sc_q = spline3_table_scale(erf_x_d3, ic.coulomb.ewaldCoeff, etol);
+        }
 
         if (debug)
         {

@@ -88,6 +88,10 @@ struct EspShortRangeParameters
 {
     //! ESP short-range cutoff r_c.
     real cutoff = 0;
+    //! PSWF splitting bandlimit c.
+    real splitCoefficient = 0;
+    //! Requested ESP relative force tolerance.
+    real relativeTolerance = 0;
     //! ESP self correction coefficient, -1/(r_c lambda_0).
     real selfCoeff = 0;
     //! Polynomial coefficients for the ESP short-range force.

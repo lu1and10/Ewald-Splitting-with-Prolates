@@ -634,8 +634,15 @@ static void init_ewald_f_table(const interaction_const_t& ic,
 
     if (useCoulombTable)
     {
-        *coulombTables = generateEwaldCorrectionTables(
-                tableSize, tableScale, ic.coulomb.ewaldCoeff, v_q_ewald_lr);
+        if (usingEsp(ic.coulomb.type))
+        {
+            *coulombTables = generateEspShortRangeTable(ic, tableSize, tableScale);
+        }
+        else
+        {
+            *coulombTables = generateEwaldCorrectionTables(
+                    tableSize, tableScale, ic.coulomb.ewaldCoeff, v_q_ewald_lr);
+        }
     }
 
     if (useVdwTable)
@@ -819,12 +826,14 @@ void init_forcerec(FILE*                            fplog,
             fplog, inputrec, mtop, systemHasNetCharge, anMDModuleProvidesDirectCoulomb));
     if (usingEsp(inputrec.coulombtype))
     {
-        forcerec->ic->esp.cutoff          = inputrec.espParams.cutoff;
-        forcerec->ic->esp.selfCoeff       = inputrec.espParams.selfCoeff;
-        forcerec->ic->esp.forcePolyCoeff  = inputrec.espParams.short_range_force_poly;
-        forcerec->ic->esp.energyPolyCoeff = inputrec.espParams.short_range_energy_poly;
-        forcerec->ic->esp.forcePolyOrder  = inputrec.espParams.short_range_force_poly_order;
-        forcerec->ic->esp.energyPolyOrder = inputrec.espParams.short_range_energy_poly_order;
+        forcerec->ic->esp.cutoff            = inputrec.espParams.cutoff;
+        forcerec->ic->esp.splitCoefficient  = inputrec.espParams.c;
+        forcerec->ic->esp.relativeTolerance = inputrec.espSettings.accuracy;
+        forcerec->ic->esp.selfCoeff         = inputrec.espParams.selfCoeff;
+        forcerec->ic->esp.forcePolyCoeff    = inputrec.espParams.short_range_force_poly;
+        forcerec->ic->esp.energyPolyCoeff   = inputrec.espParams.short_range_energy_poly;
+        forcerec->ic->esp.forcePolyOrder    = inputrec.espParams.short_range_force_poly_order;
+        forcerec->ic->esp.energyPolyOrder   = inputrec.espParams.short_range_energy_poly_order;
     }
     init_interaction_const_tables(fplog, forcerec->ic.get(), forcerec->rlist, inputrec.tabext);
 

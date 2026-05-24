@@ -358,7 +358,7 @@ private:
 #undef GMX_NBNXM_ESP_ENERGY_ORDER_CASE
     }
 
-    //! Whether this calculator evaluates ESP instead of Gaussian Ewald.
+    //! Whether this calculator evaluates ESP instead of standard Ewald.
     const bool useEsp_;
     //! Ewald beta
     const SimdReal beta_;

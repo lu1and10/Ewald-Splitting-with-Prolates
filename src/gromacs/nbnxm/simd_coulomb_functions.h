@@ -150,7 +150,7 @@ public:
         if (useEsp_)
         {
             GMX_ASSERT(ic.esp.cutoff > 0, "ESP short-range calculator requires a positive cutoff");
-            GMX_ASSERT(espForcePolyOrder_ > 0 && espEnergyPolyOrder_ > 0,
+            GMX_ASSERT(espForcePolyOrder_ != 0 && espEnergyPolyOrder_ != 0,
                        "ESP short-range calculator requires populated polynomials");
         }
     }
@@ -232,8 +232,12 @@ private:
             return value;
         }
 
-        SimdReal value(coefs[runtimeOrder - 1]);
-        for (int i = runtimeOrder - 2; i >= 0; --i)
+        // Negative orders are used only by nonbonded-benchmark to force the
+        // runtime Horner path with the same polynomial degree as the
+        // compile-time dispatch path.
+        const int order = runtimeOrder > 0 ? runtimeOrder : -runtimeOrder;
+        SimdReal  value(coefs[order - 1]);
+        for (int i = order - 2; i >= 0; --i)
         {
             value = fma(value, s, SimdReal(coefs[i]));
         }

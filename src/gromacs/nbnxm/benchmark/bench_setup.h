@@ -76,6 +76,7 @@ enum class NbnxmBenchMarkCoulomb : int
 {
     Pme,
     ReactionField,
+    Esp,
     Count
 };
 
@@ -114,6 +115,12 @@ struct NbnxmKernelBenchOptions
     NbnxmBenchMarkCoulomb coulombType = NbnxmBenchMarkCoulomb::Pme;
     //! Whether to use tabulated PME grid correction instead of analytical, not applicable with simd=no
     bool useTabulatedEwaldCorr = false;
+    //! ESP short-range force polynomial order for benchmark runs
+    int espForcePolyOrder = 12;
+    //! ESP short-range energy polynomial order for benchmark runs
+    int espEnergyPolyOrder = 12;
+    //! Force the ESP runtime polynomial path instead of compile-time order dispatch
+    bool useRuntimeEspPolynomials = false;
     //! Whether to run all combinations of Coulomb type, combination rule and SIMD
     bool doAll = false;
     //! Number of iterations to run before running each kernel benchmark, currently always 1

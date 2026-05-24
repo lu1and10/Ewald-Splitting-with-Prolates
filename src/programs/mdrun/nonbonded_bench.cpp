@@ -56,6 +56,7 @@
 #include "gromacs/utility/arrayref.h"
 #include "gromacs/utility/arraysize.h"
 #include "gromacs/utility/enumerationhelpers.h"
+#include "gromacs/utility/exceptions.h"
 #include "gromacs/utility/real.h"
 
 namespace gmx
@@ -169,7 +170,7 @@ void NonbondedBenchmark::initOptions(IOptionsContainer* options, ICommandLineOpt
         { "geometric", "lb", "none" }
     };
     static const EnumerationArray<NbnxmBenchMarkCoulomb, const char*> c_coulombTypeStrings = {
-        { "ewald", "reaction-field" }
+        { "ewald", "reaction-field", "esp" }
     };
 
     static const EnumerationArray<NbnxmBenchMarkInteractionModifiers, const char*> c_interactionModifierStrings = {
@@ -198,6 +199,17 @@ void NonbondedBenchmark::initOptions(IOptionsContainer* options, ICommandLineOpt
             BooleanOption("table")
                     .store(&benchmarkOptions_.useTabulatedEwaldCorr)
                     .description("Use lookup table for Ewald correction instead of analytical"));
+    options->addOption(IntegerOption("esp-force-order")
+                               .store(&benchmarkOptions_.espForcePolyOrder)
+                               .description("ESP force polynomial order for benchmark runs"));
+    options->addOption(IntegerOption("esp-energy-order")
+                               .store(&benchmarkOptions_.espEnergyPolyOrder)
+                               .description("ESP energy polynomial order for benchmark runs"));
+    options->addOption(
+            BooleanOption("esp-runtime-poly")
+                    .store(&benchmarkOptions_.useRuntimeEspPolynomials)
+                    .description("Use runtime ESP Horner evaluation instead of compile-time "
+                                 "polynomial order dispatch"));
     options->addOption(
             EnumOption<NbnxmBenchMarkCombRule>("combrule")
                     .store(&benchmarkOptions_.ljCombinationRule)
@@ -238,6 +250,10 @@ void NonbondedBenchmark::optionsFinished()
     // We compute the Ewald coefficient here to avoid a dependency of the Nbnxm on the Ewald module
     const real ewald_rtol = 1e-5;
     benchmarkOptions_.ewaldcoeff_q = calc_ewaldcoeff_q(benchmarkOptions_.pairlistCutoff, ewald_rtol);
+    if (benchmarkOptions_.espForcePolyOrder <= 0 || benchmarkOptions_.espEnergyPolyOrder <= 0)
+    {
+        GMX_THROW(InvalidInputError("ESP polynomial orders must be positive"));
+    }
 }
 
 int NonbondedBenchmark::run()

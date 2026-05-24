@@ -124,6 +124,12 @@ static std::optional<std::string> checkKernelSetup(const NbnxmKernelBenchOptions
         return "the -time option is not supported on this system";
     }
 
+    if (options.coulombType == NbnxmBenchMarkCoulomb::Esp
+        && (options.nbnxmSimd == NbnxmBenchMarkKernels::SimdNo || options.useTabulatedEwaldCorr))
+    {
+        return "the ESP benchmark only supports SIMD analytical kernels";
+    }
+
     return {};
 }
 
@@ -183,8 +189,15 @@ static interaction_const_t setupInteractionConst(const NbnxmKernelBenchOptions& 
     ic.vdw.modifier = InteractionModifiers::PotShift;
     ic.vdw.cutoff   = options.pairlistCutoff;
 
-    ic.coulomb.type = (options.coulombType == NbnxmBenchMarkCoulomb::Pme ? CoulombInteractionType::Pme
-                                                                         : CoulombInteractionType::RF);
+    switch (options.coulombType)
+    {
+        case NbnxmBenchMarkCoulomb::Pme: ic.coulomb.type = CoulombInteractionType::Pme; break;
+        case NbnxmBenchMarkCoulomb::ReactionField:
+            ic.coulomb.type = CoulombInteractionType::RF;
+            break;
+        case NbnxmBenchMarkCoulomb::Esp: ic.coulomb.type = CoulombInteractionType::Esp; break;
+        default: GMX_RELEASE_ASSERT(false, "Unhandled Coulomb benchmark type");
+    }
     ic.coulomb.modifier = convertInteractionModifiers(options.interactionModifier);
     ic.coulomb.cutoff   = options.pairlistCutoff;
 
@@ -194,7 +207,33 @@ static interaction_const_t setupInteractionConst(const NbnxmKernelBenchOptions& 
     ic.coulomb.reactionFieldShift =
             1 / ic.coulomb.cutoff + ic.coulomb.reactionFieldCoefficient * gmx::square(ic.coulomb.cutoff);
 
-    if (usingPmeOrEwald(ic.coulomb.type))
+    if (options.coulombType == NbnxmBenchMarkCoulomb::Esp)
+    {
+        const int forceOrder  = options.espForcePolyOrder;
+        const int energyOrder = options.espEnergyPolyOrder;
+        GMX_RELEASE_ASSERT(forceOrder > 0 && energyOrder > 0,
+                           "ESP polynomial orders must be positive");
+
+        ic.coulomb.ewaldShift    = 0;
+        ic.esp.cutoff            = options.pairlistCutoff;
+        ic.esp.splitCoefficient  = 16;
+        ic.esp.relativeTolerance = 1e-4_real;
+        ic.esp.selfCoeff         = -1 / ic.esp.cutoff;
+        ic.esp.forcePolyOrder    = options.useRuntimeEspPolynomials ? -forceOrder : forceOrder;
+        ic.esp.energyPolyOrder   = options.useRuntimeEspPolynomials ? -energyOrder : energyOrder;
+        ic.esp.forcePolyCoeff.resize(forceOrder);
+        ic.esp.energyPolyCoeff.resize(energyOrder);
+        for (int i = 0; i < forceOrder; ++i)
+        {
+            const real sign          = (i % 2 == 0 ? 1.0_real : -1.0_real);
+            ic.esp.forcePolyCoeff[i] = sign * 0.05_real / static_cast<real>((i + 1) * (i + 1));
+        }
+        for (int i = 0; i < energyOrder; ++i)
+        {
+            ic.esp.energyPolyCoeff[i] = 0.025_real / static_cast<real>((i + 1) * (i + 1));
+        }
+    }
+    else if (usingPmeOrEwald(ic.coulomb.type))
     {
         // Ewald coefficients, we ignore the potential shift
         GMX_RELEASE_ASSERT(options.ewaldcoeff_q > 0, "Ewald coefficient should be > 0");
@@ -365,12 +404,16 @@ static void setupAndRunInstance(const BenchmarkSystem&         system,
         "PotShift", "PotSwitch", "ForceSwitch"
     };
 
+    const EnumerationArray<NbnxmBenchMarkCoulomb, std::string> coulombNames = {
+        "Ewald", "RF", options.useRuntimeEspPolynomials ? "ESP-rt" : "ESP-ct"
+    };
+
 
     if (!doWarmup)
     {
         fprintf(stdout,
                 "%-7s %-4s %-5s %-4s %-12s",
-                options.coulombType == NbnxmBenchMarkCoulomb::Pme ? "Ewald" : "RF",
+                coulombNames[options.coulombType].c_str(),
                 options.useHalfLJOptimization ? "half" : "all",
                 combruleNames[options.ljCombinationRule].c_str(),
                 kernelNames[options.nbnxmSimd].c_str(),
@@ -396,7 +439,7 @@ static void setupAndRunInstance(const BenchmarkSystem&         system,
                                        ? "table"
                                        : "analytical")
                             : "",
-                    options.coulombType == NbnxmBenchMarkCoulomb::Pme ? "Ewald" : "RF",
+                    coulombNames[options.coulombType].c_str(),
                     options.useHalfLJOptimization ? "half" : "all",
                     combruleNames[options.ljCombinationRule].c_str(),
                     kernelNames[options.nbnxmSimd].c_str(),

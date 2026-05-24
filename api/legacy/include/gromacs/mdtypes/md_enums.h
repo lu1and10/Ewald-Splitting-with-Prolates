@@ -305,9 +305,8 @@ static inline bool usingEsp(const CoulombInteractionType& cit)
 static inline bool usingPme(const CoulombInteractionType& cit)
 {
     return (cit == CoulombInteractionType::Pme || cit == CoulombInteractionType::PmeSwitch
-            || cit == CoulombInteractionType::PmeUser
-            || cit == CoulombInteractionType::PmeUserSwitch || cit == CoulombInteractionType::P3mAD
-            || cit == CoulombInteractionType::Esp);
+            || cit == CoulombInteractionType::PmeUser || cit == CoulombInteractionType::PmeUserSwitch
+            || cit == CoulombInteractionType::P3mAD || cit == CoulombInteractionType::Esp);
 }
 
 //! Returns whether we use PME or full Ewald

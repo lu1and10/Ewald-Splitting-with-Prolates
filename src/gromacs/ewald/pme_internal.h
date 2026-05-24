@@ -394,21 +394,21 @@ struct gmx_pme_t
     bool simulationIsParallel; /* Whether more than one MPI rank is used for the simulation */
     bool haveDDAtomOrdering;   /* Whether atoms are ordered according to DD instead of global top */
 
-    bool bPPnode;   /* Node also does particle-particle forces */
-    bool doCoulomb; /* Apply PME to electrostatics */
-    bool doLJ;      /* Apply PME to Lennard-Jones r^-6 interactions */
-    bool useEsp = false; /* Use ESP PSWF kernels for Coulomb mesh work */
+    bool          bPPnode;        /* Node also does particle-particle forces */
+    bool          doCoulomb;      /* Apply PME to electrostatics */
+    bool          doLJ;           /* Apply PME to Lennard-Jones r^-6 interactions */
+    bool          useEsp = false; /* Use ESP PSWF kernels for Coulomb mesh work */
     EspParameters espRuntime;
-    bool bFEP;      /* Compute Free energy contribution */
-    bool bFEP_q;
-    bool bFEP_lj;
-    int  nkx, nky, nkz; /* Grid dimensions */
-    bool bP3M;          /* Do P3M: optimize the influence function */
-    int  pme_order;
-    real ewaldcoeff_q;  /* Ewald splitting coefficient for Coulomb */
-    real ewaldcoeff_lj; /* Ewald splitting coefficient for r^-6 */
-    real epsilon_r;
-    int  pmeGpuGridHalo = 0; /* Size of the grid halo region with PME GPU decomposition */
+    bool          bFEP; /* Compute Free energy contribution */
+    bool          bFEP_q;
+    bool          bFEP_lj;
+    int           nkx, nky, nkz; /* Grid dimensions */
+    bool          bP3M;          /* Do P3M: optimize the influence function */
+    int           pme_order;
+    real          ewaldcoeff_q;  /* Ewald splitting coefficient for Coulomb */
+    real          ewaldcoeff_lj; /* Ewald splitting coefficient for r^-6 */
+    real          epsilon_r;
+    int           pmeGpuGridHalo = 0; /* Size of the grid halo region with PME GPU decomposition */
     real haloExtentForAtomDisplacement = .0; /* extent of halo region in nm to account for atom */
 
 

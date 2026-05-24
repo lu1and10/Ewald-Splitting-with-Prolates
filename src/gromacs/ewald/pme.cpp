@@ -824,12 +824,12 @@ static std::unique_ptr<gmx_pme_t> pmeInitWithStorage(const gmx_domdec_t*  dd,
     {
         pme->espRuntime = ir->espParams;
     }
-    pme->bFEP_q    = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_q);
-    pme->bFEP_lj   = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_lj);
-    pme->bFEP      = (pme->bFEP_q || pme->bFEP_lj);
-    pme->nkx       = ir->nkx;
-    pme->nky       = ir->nky;
-    pme->nkz       = ir->nkz;
+    pme->bFEP_q  = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_q);
+    pme->bFEP_lj = ((ir->efep != FreeEnergyPerturbationType::No) && bFreeEnergy_lj);
+    pme->bFEP    = (pme->bFEP_q || pme->bFEP_lj);
+    pme->nkx     = ir->nkx;
+    pme->nky     = ir->nky;
+    pme->nkz     = ir->nkz;
     pme->bP3M = (ir->coulombtype == CoulombInteractionType::P3mAD || std::getenv("GMX_PME_P3M") != nullptr);
     pme->pme_order     = ir->pme_order;
     pme->ewaldcoeff_q  = ewaldcoeff_q;

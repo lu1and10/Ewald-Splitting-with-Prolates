@@ -37,13 +37,14 @@
 
 #include "gmxpre.h"
 
+#include "gromacs/fileio/tpxio.h"
+
 #include <filesystem>
 #include <memory>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "gromacs/fileio/tpxio.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/mdtypes/state.h"
 #include "gromacs/topology/symtab.h"
@@ -69,7 +70,7 @@ void initializeRequiredInputrecTrees(t_inputrec* ir)
 
 TEST(TpxIoEsp, RoundTripsEspParameters)
 {
-    TestFileManager fileManager;
+    TestFileManager             fileManager;
     const std::filesystem::path tprFilename = fileManager.getTemporaryFilePath("esp-roundtrip.tpr");
 
     t_inputrec ir;
@@ -85,29 +86,27 @@ TEST(TpxIoEsp, RoundTripsEspParameters)
     ir.espSettings.spreadAccuracy = 2.5e-5_real;
     ir.espSettings.stencilOrder   = 7;
 
-    ir.espParams.c                       = 12.024_real;
-    ir.espParams.lambda0                 = 0.8125_real;
-    ir.espParams.psi0AtZero              = 1.0_real;
-    ir.espParams.selfCoeff               = -1.025641025641_real;
-    ir.espParams.cutoff                  = ir.rcoulomb;
-    ir.espParams.c1                      = 9.125_real;
-    ir.espParams.lambda0_w               = 0.734375_real;
-    ir.espParams.P                       = 7;
-    ir.espParams.P_padded                = 8;
-    ir.espParams.nx                      = 24;
-    ir.espParams.ny                      = 30;
-    ir.espParams.nz                      = 36;
-    ir.espParams.poly_order              = 4;
-    ir.espParams.rho_coeff               = { 0.125_real, 0.25_real, 0.5_real, 1.0_real };
-    ir.espParams.drho_coeff              = { -0.375_real, -0.25_real, -0.125_real, 0.0_real };
-    ir.espParams.split_fourier_poly_order = 3;
-    ir.espParams.split_fourier_poly       = { 1.0_real, -0.5_real, 0.25_real };
-    ir.espParams.spread_fourier_poly_order = 3;
-    ir.espParams.spread_fourier_poly       = { 1.0_real, -0.25_real, 0.0625_real };
+    ir.espParams.c                            = 12.024_real;
+    ir.espParams.lambda0                      = 0.8125_real;
+    ir.espParams.psi0AtZero                   = 1.0_real;
+    ir.espParams.selfCoeff                    = -1.025641025641_real;
+    ir.espParams.cutoff                       = ir.rcoulomb;
+    ir.espParams.c1                           = 9.125_real;
+    ir.espParams.lambda0_w                    = 0.734375_real;
+    ir.espParams.P                            = 7;
+    ir.espParams.P_padded                     = 8;
+    ir.espParams.nx                           = 24;
+    ir.espParams.ny                           = 30;
+    ir.espParams.nz                           = 36;
+    ir.espParams.poly_order                   = 4;
+    ir.espParams.rho_coeff                    = { 0.125_real, 0.25_real, 0.5_real, 1.0_real };
+    ir.espParams.drho_coeff                   = { -0.375_real, -0.25_real, -0.125_real, 0.0_real };
+    ir.espParams.split_fourier_poly_order     = 3;
+    ir.espParams.split_fourier_poly           = { 1.0_real, -0.5_real, 0.25_real };
+    ir.espParams.spread_fourier_poly_order    = 3;
+    ir.espParams.spread_fourier_poly          = { 1.0_real, -0.25_real, 0.0625_real };
     ir.espParams.short_range_force_poly_order = 4;
-    ir.espParams.short_range_force_poly = {
-        0.875_real, -0.125_real, 0.03125_real, -0.0078125_real
-    };
+    ir.espParams.short_range_force_poly = { 0.875_real, -0.125_real, 0.03125_real, -0.0078125_real };
     ir.espParams.short_range_energy_poly_order = 4;
     ir.espParams.short_range_energy_poly = { -0.75_real, 0.25_real, -0.0625_real, 0.015625_real };
 

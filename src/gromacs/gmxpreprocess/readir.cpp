@@ -354,8 +354,9 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
         }
         if (ir->vdwtype != VanDerWaalsType::User && ir->rcoulomb != ir->rvdw)
         {
-            wi->addError("ESP: rcoulomb != rvdw is not supported in MVP; "
-                         "the short-range NBNXM cutoffs are coupled.");
+            wi->addError(
+                    "ESP: rcoulomb != rvdw is not supported in MVP; "
+                    "the short-range NBNXM cutoffs are coupled.");
         }
     }
 
@@ -1723,10 +1724,9 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
     if (usingPme(ir->coulombtype) || usingLJPme(ir->vdwtype))
     {
         // TODO: Move these checks into the ewald module with the options class
-        int orderMin = 3;
-        int orderMax = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 12);
-        int effectiveOrderMax =
-                (ir->coulombtype == CoulombInteractionType::Esp ? 16 : orderMax);
+        int orderMin          = 3;
+        int orderMax          = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 12);
+        int effectiveOrderMax = (ir->coulombtype == CoulombInteractionType::Esp ? 16 : orderMax);
 
         if (ir->pme_order < orderMin || ir->pme_order > effectiveOrderMax)
         {
@@ -2556,10 +2556,10 @@ void get_ir(const char*     mdparin,
     printStringNoNewline(&inp, "Separate tables between energy group pairs");
     setStringEntry(&inp, "energygrp-table", inputrecStrings->egptable, nullptr);
     printStringNoNewline(&inp, "Spacing for the PME/PPPM FFT grid");
-    ir->fourier_spacing = get_ereal(&inp, "fourierspacing", 0.12, wi);
-    ir->espSettings.accuracy        = get_ereal(&inp, "esp-accuracy", 1e-4, wi);
-    ir->espSettings.spreadAccuracy  = get_ereal(&inp, "esp-spread-accuracy", -1.0, wi);
-    ir->espSettings.stencilOrder    = get_eint(&inp, "esp-stencil-order", -1, wi);
+    ir->fourier_spacing            = get_ereal(&inp, "fourierspacing", 0.12, wi);
+    ir->espSettings.accuracy       = get_ereal(&inp, "esp-accuracy", 1e-4, wi);
+    ir->espSettings.spreadAccuracy = get_ereal(&inp, "esp-spread-accuracy", -1.0, wi);
+    ir->espSettings.stencilOrder   = get_eint(&inp, "esp-stencil-order", -1, wi);
     printStringNoNewline(&inp, "FFT grid size, when a value is 0 fourierspacing will be used");
     ir->nkx = get_eint(&inp, "fourier-nx", 0, wi);
     ir->nky = get_eint(&inp, "fourier-ny", 0, wi);

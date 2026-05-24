@@ -29,13 +29,12 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/gmxpreprocess/readir.h"
-
 #include <string>
 
 #include <gtest/gtest.h>
 
 #include "gromacs/fileio/warninp.h"
+#include "gromacs/gmxpreprocess/readir.h"
 #include "gromacs/mdrun/mdmodules.h"
 #include "gromacs/mdtypes/inputrec.h"
 #include "gromacs/utility/smalloc.h"
@@ -61,30 +60,31 @@ std::string makeEspMdp(const char* pbc           = "xyz",
                        const char* rcoulomb      = "1.0",
                        const char* rvdw          = "1.0")
 {
-    std::string mdp = formatString("integrator = md\n"
-                                   "nsteps = 0\n"
-                                   "dt = 0.001\n"
-                                   "coulombtype = ESP\n"
-                                   "rcoulomb = %s\n"
-                                   "rvdw = %s\n"
-                                   "rlist = 1.0\n"
-                                   "vdwtype = Cut-off\n"
-                                   "pbc = %s\n"
-                                   "free-energy = %s\n"
-                                   "pcoupl = %s\n"
-                                   "ewald-geometry = %s\n"
-                                   "nwall = %d\n"
-                                   "esp-accuracy = %s\n"
-                                   "esp-stencil-order = 12\n"
-                                   "pme-order = 16\n",
-                                   rcoulomb,
-                                   rvdw,
-                                   pbc,
-                                   freeEnergy,
-                                   pressureCoupl,
-                                   ewaldGeometry,
-                                   nwall,
-                                   accuracy);
+    std::string mdp = formatString(
+            "integrator = md\n"
+            "nsteps = 0\n"
+            "dt = 0.001\n"
+            "coulombtype = ESP\n"
+            "rcoulomb = %s\n"
+            "rvdw = %s\n"
+            "rlist = 1.0\n"
+            "vdwtype = Cut-off\n"
+            "pbc = %s\n"
+            "free-energy = %s\n"
+            "pcoupl = %s\n"
+            "ewald-geometry = %s\n"
+            "nwall = %d\n"
+            "esp-accuracy = %s\n"
+            "esp-stencil-order = 12\n"
+            "pme-order = 16\n",
+            rcoulomb,
+            rvdw,
+            pbc,
+            freeEnergy,
+            pressureCoupl,
+            ewaldGeometry,
+            nwall,
+            accuracy);
     if (nwall > 0)
     {
         mdp += "wall-type = 12-6\n"

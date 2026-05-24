@@ -300,5 +300,14 @@ TEST(EspSolve, StencilOrderOnlyAffectsPrecomputedModuli)
     EXPECT_NEAR(f.solver[f.index(kx, ky, kz)], angularInfluenceReference(f, kx, ky, kz), real(1e-6));
 }
 
+TEST(EspSolve, CompileTimeSplitPolyOrderDispatchCoversAutotunedRange)
+{
+    EXPECT_TRUE(calc_exponentials_pswf_has_compile_time_split_order(1));
+    EXPECT_TRUE(calc_exponentials_pswf_has_compile_time_split_order(8));
+    EXPECT_TRUE(calc_exponentials_pswf_has_compile_time_split_order(16));
+    EXPECT_FALSE(calc_exponentials_pswf_has_compile_time_split_order(0));
+    EXPECT_FALSE(calc_exponentials_pswf_has_compile_time_split_order(17));
+}
+
 } // namespace
 } // namespace gmx::test

@@ -287,6 +287,8 @@ using PME_T = real;
 namespace
 {
 
+constexpr int c_maxSpecializedPswfSplitPolyOrder = 16;
+
 int solveBufferIndex(const int kx, const int iy, const int iz, const ivec localOffset, const ivec localNData)
 {
     return (iz * localNData[YY] + iy) * localNData[XX] + (kx - localOffset[XX]);
@@ -307,35 +309,87 @@ real evaluatePolynomial(const ArrayRef<const real> coefficients, const int order
     return value;
 }
 
+template<int splitPolyOrderSpecialization>
+real evaluateSplitFourierPolynomialScalar(const ArrayRef<const real> splitFourierPoly,
+                                          const int                  splitPolyOrder,
+                                          const real                 normalizedArg)
+{
+    if constexpr (splitPolyOrderSpecialization > 0)
+    {
+        const real* const gmx_restrict splitPoly = splitFourierPoly.data();
+        real                           chiHat    = splitPoly[splitPolyOrderSpecialization - 1];
+        for (int j = splitPolyOrderSpecialization - 2; j >= 0; --j)
+        {
+            chiHat = chiHat * normalizedArg + splitPoly[j];
+        }
+        return chiHat;
+    }
+    else
+    {
+        return evaluatePolynomial(splitFourierPoly, splitPolyOrder, normalizedArg);
+    }
+}
+
+#if defined PME_SIMD_SOLVE
+template<int splitPolyOrderSpecialization>
+SimdReal evaluateSplitFourierPolynomialSimd(const real* const gmx_restrict splitPoly,
+                                            const int                      splitPolyOrder,
+                                            const SimdReal&                normalizedArg)
+{
+    if constexpr (splitPolyOrderSpecialization > 0)
+    {
+        SimdReal chiHat(splitPoly[splitPolyOrderSpecialization - 1]);
+        for (int j = splitPolyOrderSpecialization - 2; j >= 0; --j)
+        {
+            chiHat = fma(chiHat, normalizedArg, SimdReal(splitPoly[j]));
+        }
+        return chiHat;
+    }
+    else
+    {
+        SimdReal chiHat(splitPoly[splitPolyOrder - 1]);
+        for (int j = splitPolyOrder - 2; j >= 0; --j)
+        {
+            chiHat = fma(chiHat, normalizedArg, SimdReal(splitPoly[j]));
+        }
+        return chiHat;
+    }
+}
+#endif
+
 } // namespace
 
-void calc_exponentials_pswf(const int                  nx,
-                            const int                  ny,
-                            const int                  nz,
-                            const int                  maxkx,
-                            const ivec                 localOffset,
-                            const ivec                 localNData,
-                            const real                 recipXX,
-                            const real                 recipYX,
-                            const real                 recipYY,
-                            const real                 recipZX,
-                            const real                 recipZY,
-                            const real                 recipZZ,
-                            const real                 boxVolume,
-                            const real                 cutoff,
-                            const real                 bandlimit,
-                            const int                  stencilOrder,
-                            const ArrayRef<const real> splitFourierPoly,
-                            const int                  splitPolyOrder,
-                            const ArrayRef<const real> bspModX,
-                            const ArrayRef<const real> bspModY,
-                            const ArrayRef<const real> bspModZ,
-                            const ArrayRef<real>       solverBuffer,
-                            const ArrayRef<real>       scratchQSquared,
-                            const ArrayRef<real>       scratchBspX,
-                            const ArrayRef<real>       scratchChi,
-                            const ArrayRef<real>       scratchPk)
+template<int splitPolyOrderSpecialization>
+void calc_exponentials_pswf_impl(const int                  nx,
+                                 const int                  ny,
+                                 const int                  nz,
+                                 const int                  maxkx,
+                                 const ivec                 localOffset,
+                                 const ivec                 localNData,
+                                 const real                 recipXX,
+                                 const real                 recipYX,
+                                 const real                 recipYY,
+                                 const real                 recipZX,
+                                 const real                 recipZY,
+                                 const real                 recipZZ,
+                                 const real                 boxVolume,
+                                 const real                 cutoff,
+                                 const real                 bandlimit,
+                                 const int                  stencilOrder,
+                                 const ArrayRef<const real> splitFourierPoly,
+                                 const int                  splitPolyOrder,
+                                 const ArrayRef<const real> bspModX,
+                                 const ArrayRef<const real> bspModY,
+                                 const ArrayRef<const real> bspModZ,
+                                 const ArrayRef<real>       solverBuffer,
+                                 const ArrayRef<real>       scratchQSquared,
+                                 const ArrayRef<real>       scratchBspX,
+                                 const ArrayRef<real>       scratchChi,
+                                 const ArrayRef<real>       scratchPk)
 {
+    static_assert(splitPolyOrderSpecialization >= 0
+                  && splitPolyOrderSpecialization <= c_maxSpecializedPswfSplitPolyOrder);
+
     GMX_ASSERT(nx > 0 && ny > 0 && nz > 0, "ESP solve requires positive grid sizes");
     GMX_ASSERT(maxkx >= 0 && maxkx <= nx, "ESP solve maxkx out of range");
     GMX_ASSERT(localNData[XX] > 0 && localNData[YY] > 0 && localNData[ZZ] > 0,
@@ -443,11 +497,8 @@ void calc_exponentials_pswf(const int                  nx,
                 const SimdReal arg      = cutoffSimd * sqrt(qSquared);
                 const SimdReal normalizedArg =
                         min(max(arg * twoInvBandlimitSimd - oneSimd, minusOneSimd), oneSimd);
-                SimdReal chiHat(splitPoly[splitPolyOrder - 1]);
-                for (int j = splitPolyOrder - 2; j >= 0; --j)
-                {
-                    chiHat = fma(chiHat, normalizedArg, SimdReal(splitPoly[j]));
-                }
+                const SimdReal chiHat = evaluateSplitFourierPolynomialSimd<splitPolyOrderSpecialization>(
+                        splitPoly, splitPolyOrder, normalizedArg);
 
                 const SimdReal bspTotal = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
                 const SimdReal denom    = bspTotal * qSquared;
@@ -467,7 +518,8 @@ void calc_exponentials_pswf(const int                  nx,
                 if (arg <= bandlimit)
                 {
                     const real normalizedArg = arg * twoInvBandlimit - real(1);
-                    chiHat = evaluatePolynomial(splitFourierPoly, splitPolyOrder, normalizedArg);
+                    chiHat = evaluateSplitFourierPolynomialScalar<splitPolyOrderSpecialization>(
+                            splitFourierPoly, splitPolyOrder, normalizedArg);
                 }
 
                 const real denom = bspXScratch[lx] * bspYZ * qSquared;
@@ -484,6 +536,119 @@ void calc_exponentials_pswf(const int                  nx,
             }
         }
     }
+}
+
+void calc_exponentials_pswf(const int                  nx,
+                            const int                  ny,
+                            const int                  nz,
+                            const int                  maxkx,
+                            const ivec                 localOffset,
+                            const ivec                 localNData,
+                            const real                 recipXX,
+                            const real                 recipYX,
+                            const real                 recipYY,
+                            const real                 recipZX,
+                            const real                 recipZY,
+                            const real                 recipZZ,
+                            const real                 boxVolume,
+                            const real                 cutoff,
+                            const real                 bandlimit,
+                            const int                  stencilOrder,
+                            const ArrayRef<const real> splitFourierPoly,
+                            const int                  splitPolyOrder,
+                            const ArrayRef<const real> bspModX,
+                            const ArrayRef<const real> bspModY,
+                            const ArrayRef<const real> bspModZ,
+                            const ArrayRef<real>       solverBuffer,
+                            const ArrayRef<real>       scratchQSquared,
+                            const ArrayRef<real>       scratchBspX,
+                            const ArrayRef<real>       scratchChi,
+                            const ArrayRef<real>       scratchPk)
+{
+#define GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(order)            \
+    case order:                                              \
+        calc_exponentials_pswf_impl<order>(nx,               \
+                                           ny,               \
+                                           nz,               \
+                                           maxkx,            \
+                                           localOffset,      \
+                                           localNData,       \
+                                           recipXX,          \
+                                           recipYX,          \
+                                           recipYY,          \
+                                           recipZX,          \
+                                           recipZY,          \
+                                           recipZZ,          \
+                                           boxVolume,        \
+                                           cutoff,           \
+                                           bandlimit,        \
+                                           stencilOrder,     \
+                                           splitFourierPoly, \
+                                           splitPolyOrder,   \
+                                           bspModX,          \
+                                           bspModY,          \
+                                           bspModZ,          \
+                                           solverBuffer,     \
+                                           scratchQSquared,  \
+                                           scratchBspX,      \
+                                           scratchChi,       \
+                                           scratchPk);       \
+        return
+
+    switch (splitPolyOrder)
+    {
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(1);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(2);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(3);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(4);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(5);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(6);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(7);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(8);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(9);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(10);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(11);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(12);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(13);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(14);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(15);
+        GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER(16);
+        default:
+            calc_exponentials_pswf_impl<0>(nx,
+                                           ny,
+                                           nz,
+                                           maxkx,
+                                           localOffset,
+                                           localNData,
+                                           recipXX,
+                                           recipYX,
+                                           recipYY,
+                                           recipZX,
+                                           recipZY,
+                                           recipZZ,
+                                           boxVolume,
+                                           cutoff,
+                                           bandlimit,
+                                           stencilOrder,
+                                           splitFourierPoly,
+                                           splitPolyOrder,
+                                           bspModX,
+                                           bspModY,
+                                           bspModZ,
+                                           solverBuffer,
+                                           scratchQSquared,
+                                           scratchBspX,
+                                           scratchChi,
+                                           scratchPk);
+            return;
+    }
+
+#undef GMX_ESP_SOLVE_DISPATCH_SPLIT_ORDER
+}
+
+bool calc_exponentials_pswf_has_compile_time_split_order(const int splitPolyOrder)
+{
+    return splitPolyOrder > 0 && splitPolyOrder <= c_maxSpecializedPswfSplitPolyOrder;
 }
 
 int PmeSolve::solveCoulombYZX(const gmx_pme_t& pme,

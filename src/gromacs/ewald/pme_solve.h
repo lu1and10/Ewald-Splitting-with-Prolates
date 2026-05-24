@@ -79,6 +79,9 @@ void calc_exponentials_pswf(int                       nx,
                             gmx::ArrayRef<real>       scratchChi,
                             gmx::ArrayRef<real>       scratchPk);
 
+//! Whether calc_exponentials_pswf() has compile-time Horner dispatch for \p splitPolyOrder.
+bool calc_exponentials_pswf_has_compile_time_split_order(int splitPolyOrder);
+
 //! Class for solving PME for Coulomb and LJ
 class PmeSolve
 {

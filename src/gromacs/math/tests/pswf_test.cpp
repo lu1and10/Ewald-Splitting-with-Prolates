@@ -109,6 +109,20 @@ double splitFourierPolynomialValue(const RealAlignedVector& coefs,
     return value;
 }
 
+double spreadRealPolynomialValue(const RealAlignedVector& coefs,
+                                 const int                polyOrder,
+                                 const int                pPadded,
+                                 const int                k,
+                                 const double             x)
+{
+    double value = coefs[(polyOrder - 1) * pPadded + k];
+    for (int l = polyOrder - 2; l >= 0; --l)
+    {
+        value = value * x + coefs[l * pPadded + k];
+    }
+    return value;
+}
+
 double polynomialValue(const RealAlignedVector& coefs, const int polyOrder, const double x)
 {
     double value = coefs[polyOrder - 1];
@@ -290,11 +304,7 @@ TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
                              / (0.5 * static_cast<double>(p));
             const double ref = psi.eval(s);
 
-            double poly = coefs[(polyOrder - 1) * pPadded + k];
-            for (int l = polyOrder - 2; l >= 0; --l)
-            {
-                poly = poly * x + coefs[l * pPadded + k];
-            }
+            const double poly = spreadRealPolynomialValue(coefs, polyOrder, pPadded, k, x);
             EXPECT_NEAR(poly, ref, 1e-4) << "k=" << k << " x=" << x;
         }
     }
@@ -315,6 +325,56 @@ TEST(SpreadRealPoly, PaddedTailIsZero)
         {
             EXPECT_EQ(coefs[l * pPadded + k], 0.0) << "l=" << l << " k=" << k;
         }
+    }
+}
+
+TEST(SpreadRealPoly, CoefficientToleranceAffectsAdaptiveOrder)
+{
+    constexpr int    p       = 6;
+    constexpr int    pPadded = 8;
+    constexpr double cWindow = 14.471;
+
+    RealAlignedVector looseCoefs;
+    RealAlignedVector tightCoefs;
+    int               looseOrder = 0;
+    int               tightOrder = 0;
+
+    spreadRealPoly(p, pPadded, 1e-2, 1e-1, cWindow, &looseCoefs, &looseOrder);
+    spreadRealPoly(p, pPadded, 1e-2, 1e-8, cWindow, &tightCoefs, &tightOrder);
+
+    EXPECT_GT(tightOrder, looseOrder);
+}
+
+TEST(SpreadRealPoly, RepresentativeTolerancesBoundDenseSamples)
+{
+    constexpr int    p       = 6;
+    constexpr int    pPadded = 8;
+    constexpr double cWindow = 14.471;
+
+    const Pswf0 psi(cWindow);
+    for (const double tolerance : { 1e-2, 1e-4, 1e-7 })
+    {
+        RealAlignedVector coefs;
+        int               polyOrder = 0;
+        spreadRealPoly(p, pPadded, tolerance, 0.1 * tolerance, cWindow, &coefs, &polyOrder);
+
+        double maxError = 0.0;
+        for (int k = 0; k < p; ++k)
+        {
+            for (int i = 0; i <= 128; ++i)
+            {
+                const double x             = static_cast<double>(i) / 128.0;
+                const int    tkmBasisIndex = p - k - 1;
+                const double s             = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
+                                 / (0.5 * static_cast<double>(p));
+                const double error = std::abs(
+                        spreadRealPolynomialValue(coefs, polyOrder, pPadded, k, x) - psi.eval(s));
+                maxError = std::max(maxError, error);
+            }
+        }
+
+        const double acceptedTolerance = GMX_DOUBLE ? 1.01 * tolerance : std::max(1.01 * tolerance, 5e-5);
+        EXPECT_LE(maxError, acceptedTolerance) << "tolerance=" << tolerance << " order=" << polyOrder;
     }
 }
 
@@ -346,6 +406,44 @@ TEST(SpreadFourierPoly, MatchesRawFourierWindowAt03)
         poly = poly * s + coefs[l];
     }
     EXPECT_NEAR(poly, ref, 1e-6);
+}
+
+TEST(SpreadFourierPoly, CoefficientToleranceAffectsAdaptiveOrder)
+{
+    RealAlignedVector looseCoefs;
+    RealAlignedVector tightCoefs;
+    int               looseOrder = 0;
+    int               tightOrder = 0;
+
+    spreadFourierPoly(1e-2, 1e-1, 14.471, &looseCoefs, &looseOrder);
+    spreadFourierPoly(1e-2, 1e-8, 14.471, &tightCoefs, &tightOrder);
+
+    EXPECT_GT(tightOrder, looseOrder);
+}
+
+TEST(SpreadFourierPoly, RepresentativeTolerancesBoundDenseSamples)
+{
+    constexpr double c = 14.471;
+    const Pswf0      psi(c);
+
+    for (const double tolerance : { 1e-2, 1e-4, 1e-7 })
+    {
+        RealAlignedVector coefs;
+        int               polyOrder = 0;
+        spreadFourierPoly(tolerance, 0.1 * tolerance, c, &coefs, &polyOrder);
+
+        double maxError = 0.0;
+        for (int i = 0; i <= 128; ++i)
+        {
+            const double s = static_cast<double>(i) / 128.0;
+            const double error =
+                    std::abs(polynomialValue(coefs, polyOrder, s) - spreadFourierReference(psi, s));
+            maxError = std::max(maxError, error);
+        }
+
+        const double acceptedTolerance = GMX_DOUBLE ? 1.01 * tolerance : std::max(1.01 * tolerance, 5e-5);
+        EXPECT_LE(maxError, acceptedTolerance) << "tolerance=" << tolerance << " order=" << polyOrder;
+    }
 }
 
 TEST(SplitFourierPoly, MatchesChiHatAt05)
@@ -393,6 +491,66 @@ TEST(SplitFourierPoly, MatchesChiHatNearBandlimit)
 
     const double poly = splitFourierPolynomialValue(coefs, polyOrder, arg, c);
     EXPECT_NEAR(poly, ref, 1e-3);
+}
+
+TEST(SplitFourierPoly, CoefficientToleranceAffectsAdaptiveOrder)
+{
+    RealAlignedVector looseCoefs;
+    RealAlignedVector tightCoefs;
+    int               looseOrder = 0;
+    int               tightOrder = 0;
+
+    splitFourierPoly(1e-2, 1e-1, 14.471, &looseCoefs, &looseOrder);
+    splitFourierPoly(1e-2, 1e-8, 14.471, &tightCoefs, &tightOrder);
+
+    EXPECT_GT(tightOrder, looseOrder);
+}
+
+TEST(SplitFourierPoly, RequestedToleranceBoundsDenseSamplesWithLooseCoefficientCutoff)
+{
+    RealAlignedVector coefs;
+    int               polyOrder = 0;
+
+    constexpr double c         = 14.471;
+    constexpr double tolerance = 1e-5;
+    splitFourierPoly(tolerance, 1e-1, c, &coefs, &polyOrder);
+
+    const Pswf0 psi(c);
+    double      maxError = 0.0;
+    for (int i = 0; i <= 128; ++i)
+    {
+        const double arg   = c * static_cast<double>(i) / 128.0;
+        const double error = std::abs(splitFourierPolynomialValue(coefs, polyOrder, arg, c)
+                                      - splitFourierReference(psi, arg));
+        maxError           = std::max(maxError, error);
+    }
+
+    EXPECT_LE(maxError, tolerance);
+}
+
+TEST(SplitFourierPoly, RepresentativeTolerancesBoundDenseSamples)
+{
+    constexpr double c = 14.471;
+    const Pswf0      psi(c);
+
+    for (const double tolerance : { 1e-2, 1e-4, 1e-7 })
+    {
+        RealAlignedVector coefs;
+        int               polyOrder = 0;
+        splitFourierPoly(tolerance, 0.1 * tolerance, c, &coefs, &polyOrder);
+
+        double maxError = 0.0;
+        for (int i = 0; i <= 128; ++i)
+        {
+            const double arg   = c * static_cast<double>(i) / 128.0;
+            const double error = std::abs(splitFourierPolynomialValue(coefs, polyOrder, arg, c)
+                                          - splitFourierReference(psi, arg));
+            maxError           = std::max(maxError, error);
+        }
+
+        const double acceptedTolerance = GMX_DOUBLE ? 1.01 * tolerance : std::max(1.01 * tolerance, 5e-5);
+        EXPECT_LE(maxError, acceptedTolerance) << "tolerance=" << tolerance << " order=" << polyOrder;
+    }
 }
 
 TEST(ShortRangeEnergyPoly, MatchesLongRangeCorrectionPhi)

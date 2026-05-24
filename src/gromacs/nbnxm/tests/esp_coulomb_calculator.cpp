@@ -13,9 +13,6 @@
 
 #include "gmxpre.h"
 
-#include "gromacs/nbnxm/nbnxm_simd.h"
-#include "gromacs/nbnxm/simd_coulomb_functions.h"
-
 #include <array>
 #include <vector>
 
@@ -23,6 +20,8 @@
 
 #include "gromacs/mdtypes/interaction_const.h"
 #include "gromacs/mdtypes/md_enums.h"
+#include "gromacs/nbnxm/nbnxm_simd.h"
+#include "gromacs/nbnxm/simd_coulomb_functions.h"
 #include "gromacs/simd/simd.h"
 #include "gromacs/simd/simd_math.h"
 #include "gromacs/utility/real.h"
@@ -62,11 +61,11 @@ real evaluatePolynomial(const gmx::esp::AlignedRealVector& coefs, int order, rea
 interaction_const_t makeEspInteractionConst()
 {
     interaction_const_t ic;
-    ic.coulomb.type       = CoulombInteractionType::Esp;
-    ic.coulomb.cutoff     = 2.0_real;
-    ic.coulomb.ewaldShift = 0.125_real;
-    ic.esp.cutoff         = 2.0_real;
-    ic.esp.selfCoeff      = -0.75_real;
+    ic.coulomb.type        = CoulombInteractionType::Esp;
+    ic.coulomb.cutoff      = 2.0_real;
+    ic.coulomb.ewaldShift  = 0.125_real;
+    ic.esp.cutoff          = 2.0_real;
+    ic.esp.selfCoeff       = -0.75_real;
     ic.esp.energyPolyOrder = 3;
     ic.esp.energyPolyCoeff = { 1.0_real, -0.25_real, 0.125_real };
     ic.esp.forcePolyOrder  = 3;
@@ -74,64 +73,142 @@ interaction_const_t makeEspInteractionConst()
     return ic;
 }
 
+interaction_const_t makeEspInteractionConstWithPolynomialOrders(const int forceOrder, const int energyOrder)
+{
+    interaction_const_t ic(makeEspInteractionConst());
+
+    ic.esp.forcePolyOrder = forceOrder;
+    ic.esp.forcePolyCoeff.resize(ic.esp.forcePolyOrder);
+    for (int i = 0; i < ic.esp.forcePolyOrder; ++i)
+    {
+        ic.esp.forcePolyCoeff[i] =
+                ((i % 2 == 0) ? 1.0_real : -1.0_real) * 0.05_real / static_cast<real>(i + 1);
+    }
+
+    ic.esp.energyPolyOrder = energyOrder;
+    ic.esp.energyPolyCoeff.resize(ic.esp.energyPolyOrder);
+    for (int i = 0; i < ic.esp.energyPolyOrder; ++i)
+    {
+        ic.esp.energyPolyCoeff[i] = 0.025_real / static_cast<real>((i + 1) * (i + 1));
+    }
+
+    return ic;
+}
+
+void expectCalculatorMatchesScalarReference(const interaction_const_t& ic)
+{
+    CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
+
+    const std::vector<real>       rValues       = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
+    const auto                    rV            = loadLaneValues(rValues);
+    const std::array<SimdReal, 1> rSquaredV     = { rV * rV };
+    const std::array<SimdReal, 1> rInvV         = { inv(rV) };
+    const std::array<SimdReal, 1> rInvExclV     = rInvV;
+    const std::array<SimdBool, 1> withinCutoffV = { rSquaredV[0]
+                                                    < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff) };
+
+    const std::array<SimdReal, 1> forceV = calculator.force<1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+    std::array<SimdReal, 1> forceAndEnergyForceV;
+    std::array<SimdReal, 1> correctionEnergyV;
+    calculator.forceAndCorrectionEnergy<1>(
+            rSquaredV, rInvV, rInvExclV, withinCutoffV, forceAndEnergyForceV, correctionEnergyV);
+
+    const std::vector<real> force               = storeLaneValues(forceV[0]);
+    const std::vector<real> forceAndEnergyForce = storeLaneValues(forceAndEnergyForceV[0]);
+    const std::vector<real> correctionEnergy    = storeLaneValues(correctionEnergyV[0]);
+
+    for (int lane = 0; lane < GMX_SIMD_REAL_WIDTH; ++lane)
+    {
+        const real r = rValues[lane % rValues.size()];
+        const real s = r / ic.esp.cutoff;
+
+        const real expectedForce =
+                evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r + 1.0_real / r;
+        const real expectedEnergy =
+                evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / r
+                - ic.coulomb.ewaldShift;
+
+        EXPECT_NEAR(force[lane], expectedForce, 5e-6_real) << "lane=" << lane;
+        EXPECT_NEAR(forceAndEnergyForce[lane], expectedForce, 5e-6_real) << "lane=" << lane;
+        EXPECT_NEAR(correctionEnergy[lane], expectedEnergy, 5e-6_real) << "lane=" << lane;
+    }
+}
+
 TEST(EspShortRangeCoulombCalculator, SelfEnergyUsesEspSelfCoeff)
 {
-    const interaction_const_t ic(makeEspInteractionConst());
+    const interaction_const_t                             ic(makeEspInteractionConst());
     CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
 
     EXPECT_NEAR(calculator.selfEnergy(), -ic.esp.selfCoeff, 1e-6_real);
 }
 
+TEST(EspShortRangeCoulombCalculator, CompileTimePolynomialDispatchCoversAdaptiveOrders)
+{
+    using Calculator = CoulombCalculator<KernelCoulombType::EwaldAnalytical>;
+
+    EXPECT_TRUE(Calculator::hasEspCompileTimePolynomialOrder(1));
+    EXPECT_TRUE(Calculator::hasEspCompileTimePolynomialOrder(21));
+    EXPECT_TRUE(Calculator::hasEspCompileTimePolynomialOrder(24));
+    EXPECT_FALSE(Calculator::hasEspCompileTimePolynomialOrder(0));
+    EXPECT_FALSE(Calculator::hasEspCompileTimePolynomialOrder(25));
+}
+
+TEST(EspShortRangeCoulombCalculator, HighSpecializedOrderPolynomialsMatchScalarReference)
+{
+    expectCalculatorMatchesScalarReference(makeEspInteractionConstWithPolynomialOrders(24, 21));
+}
+
+TEST(EspShortRangeCoulombCalculator, RuntimeFallbackAboveSpecializedOrderMatchesScalarReference)
+{
+    expectCalculatorMatchesScalarReference(makeEspInteractionConstWithPolynomialOrders(32, 28));
+}
+
 TEST(EspShortRangeCoulombCalculator, ForceSubtractsLongRangeCorrection)
 {
-    const interaction_const_t ic(makeEspInteractionConst());
+    const interaction_const_t                             ic(makeEspInteractionConst());
     CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
 
-    const std::vector<real> rValues = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
-    const auto              rV      = loadLaneValues(rValues);
-    const std::array<SimdReal, 1> rSquaredV = { rV * rV };
-    const std::array<SimdReal, 1> rInvV     = { inv(rV) };
-    const std::array<SimdReal, 1> rInvExclV = rInvV;
-    const std::array<SimdBool, 1> withinCutoffV = {
-        rSquaredV[0] < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff)
-    };
+    const std::vector<real>       rValues       = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
+    const auto                    rV            = loadLaneValues(rValues);
+    const std::array<SimdReal, 1> rSquaredV     = { rV * rV };
+    const std::array<SimdReal, 1> rInvV         = { inv(rV) };
+    const std::array<SimdReal, 1> rInvExclV     = rInvV;
+    const std::array<SimdBool, 1> withinCutoffV = { rSquaredV[0]
+                                                    < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff) };
 
-    const std::array<SimdReal, 1> forceV =
-            calculator.force<1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+    const std::array<SimdReal, 1> forceV = calculator.force<1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
     const std::vector<real> force = storeLaneValues(forceV[0]);
 
     for (int lane = 0; lane < GMX_SIMD_REAL_WIDTH; ++lane)
     {
-        const real r        = rValues[lane % rValues.size()];
-        const real s        = r / ic.esp.cutoff;
-        const real expected = evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r
-                              + 1.0_real / r;
+        const real r = rValues[lane % rValues.size()];
+        const real s = r / ic.esp.cutoff;
+        const real expected =
+                evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r + 1.0_real / r;
         EXPECT_NEAR(force[lane], expected, 2e-6_real) << "lane=" << lane;
     }
 }
 
 TEST(EspShortRangeCoulombCalculator, ExcludedForceSubtractsRemovedOneOverR)
 {
-    const interaction_const_t ic(makeEspInteractionConst());
+    const interaction_const_t                             ic(makeEspInteractionConst());
     CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
 
-    const std::vector<real> rValues = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
-    const auto              rV      = loadLaneValues(rValues);
-    const std::array<SimdReal, 1> rSquaredV = { rV * rV };
-    const std::array<SimdReal, 1> rInvV     = { inv(rV) };
-    const std::array<SimdReal, 1> rInvExclV = { SimdReal(0.0_real) };
-    const std::array<SimdBool, 1> withinCutoffV = {
-        rSquaredV[0] < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff)
-    };
+    const std::vector<real>       rValues       = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
+    const auto                    rV            = loadLaneValues(rValues);
+    const std::array<SimdReal, 1> rSquaredV     = { rV * rV };
+    const std::array<SimdReal, 1> rInvV         = { inv(rV) };
+    const std::array<SimdReal, 1> rInvExclV     = { SimdReal(0.0_real) };
+    const std::array<SimdBool, 1> withinCutoffV = { rSquaredV[0]
+                                                    < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff) };
 
-    const std::array<SimdReal, 1> forceV =
-            calculator.force<1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+    const std::array<SimdReal, 1> forceV = calculator.force<1>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
     const std::vector<real> force = storeLaneValues(forceV[0]);
 
     for (int lane = 0; lane < GMX_SIMD_REAL_WIDTH; ++lane)
     {
-        const real r        = rValues[lane % rValues.size()];
-        const real s        = r / ic.esp.cutoff;
+        const real r = rValues[lane % rValues.size()];
+        const real s = r / ic.esp.cutoff;
         const real expected = evaluatePolynomial(ic.esp.forcePolyCoeff, ic.esp.forcePolyOrder, s) / r;
         EXPECT_NEAR(force[lane], expected, 2e-6_real) << "lane=" << lane;
     }
@@ -139,17 +216,16 @@ TEST(EspShortRangeCoulombCalculator, ExcludedForceSubtractsRemovedOneOverR)
 
 TEST(EspShortRangeCoulombCalculator, EnergyCorrectionLeavesShortRangePotential)
 {
-    const interaction_const_t ic(makeEspInteractionConst());
+    const interaction_const_t                             ic(makeEspInteractionConst());
     CoulombCalculator<KernelCoulombType::EwaldAnalytical> calculator(ic);
 
-    const std::vector<real> rValues = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
-    const auto              rV      = loadLaneValues(rValues);
-    const std::array<SimdReal, 1> rSquaredV = { rV * rV };
-    const std::array<SimdReal, 1> rInvV     = { inv(rV) };
-    const std::array<SimdReal, 1> rInvExclV = rInvV;
-    const std::array<SimdBool, 1> withinCutoffV = {
-        rSquaredV[0] < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff)
-    };
+    const std::vector<real>       rValues       = { 0.25_real, 0.5_real, 1.0_real, 1.75_real };
+    const auto                    rV            = loadLaneValues(rValues);
+    const std::array<SimdReal, 1> rSquaredV     = { rV * rV };
+    const std::array<SimdReal, 1> rInvV         = { inv(rV) };
+    const std::array<SimdReal, 1> rInvExclV     = rInvV;
+    const std::array<SimdBool, 1> withinCutoffV = { rSquaredV[0]
+                                                    < SimdReal(ic.coulomb.cutoff * ic.coulomb.cutoff) };
 
     std::array<SimdReal, 1> forceV;
     std::array<SimdReal, 1> correctionEnergyV;
@@ -161,9 +237,8 @@ TEST(EspShortRangeCoulombCalculator, EnergyCorrectionLeavesShortRangePotential)
     {
         const real r = rValues[lane % rValues.size()];
         const real s = r / ic.esp.cutoff;
-        const real expected =
-                evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / r
-                - ic.coulomb.ewaldShift;
+        const real expected = evaluatePolynomial(ic.esp.energyPolyCoeff, ic.esp.energyPolyOrder, s) / r
+                              - ic.coulomb.ewaldShift;
         EXPECT_NEAR(correctionEnergy[lane], expected, 2e-6_real) << "lane=" << lane;
     }
 }

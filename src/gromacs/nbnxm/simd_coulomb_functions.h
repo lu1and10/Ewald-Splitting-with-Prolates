@@ -158,24 +158,23 @@ public:
     //! Returns the self energy
     inline real selfEnergy() const { return selfEnergy_; }
 
+    static constexpr int sc_maxSpecializedEspShortRangePolyOrder = 24;
+
+    //! Returns whether an ESP short-range polynomial order has a compile-time path.
+    static bool hasEspCompileTimePolynomialOrder(const int order)
+    {
+        return order > 0 && order <= sc_maxSpecializedEspShortRangePolyOrder;
+    }
+
     template<int nR>
-    gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>&            rSquaredV,
-                                              const std::array<SimdReal, nR>&            dummyRInvV,
-                                              const std::array<SimdReal, nR>&            rInvExclV,
+    gmx_inline std::array<SimdReal, nR> force(const std::array<SimdReal, nR>& rSquaredV,
+                                              const std::array<SimdReal, nR>& dummyRInvV,
+                                              const std::array<SimdReal, nR>& rInvExclV,
                                               const std::array<SimdBool, nR>& withinCutoffV)
     {
         if (useEsp_)
         {
-            return genArr<nR>(
-                    [&](int i)
-                    {
-                        const SimdReal r = rSquaredV[i] * dummyRInvV[i];
-                        const SimdReal s = r * espInvCutoff_;
-                        const SimdReal correction =
-                                evaluateEspPolynomial(espForcePolyCoeff_, espForcePolyOrder_, s);
-                        return selectByMask(fma(correction, dummyRInvV[i], rInvExclV[i]),
-                                            withinCutoffV[i]);
-                    });
+            return dispatchEspForce<nR>(rSquaredV, dummyRInvV, rInvExclV, withinCutoffV);
         }
 
         const auto brsqV = genArr<nR>(
@@ -197,18 +196,9 @@ public:
     {
         if (useEsp_)
         {
-            forceV = force<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
-            correctionEnergyV = genArr<energySize>(
-                    [&](int i)
-                    {
-                        const SimdReal r = rSquaredV[i] * rInvV[i];
-                        const SimdReal s = r * espInvCutoff_;
-                        const SimdReal longRangeCorrection =
-                                evaluateEspPolynomial(espEnergyPolyCoeff_, espEnergyPolyOrder_, s)
-                                * rInvV[i];
-                        return selectByMask(longRangeCorrection - espEwaldShift_,
-                                            withinCutoffV[i]);
-                    });
+            forceV = dispatchEspForce<nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+            correctionEnergyV =
+                    dispatchEspCorrectionEnergy<nR, energySize>(rSquaredV, rInvV, withinCutoffV);
             return;
         }
 
@@ -226,16 +216,146 @@ public:
     }
 
 private:
+    template<int polyOrder>
     gmx_inline SimdReal evaluateEspPolynomial(const real* const coefs,
-                                              const int         order,
+                                              const int         runtimeOrder,
                                               const SimdReal&   s) const
     {
-        SimdReal value(coefs[order - 1]);
-        for (int i = order - 2; i >= 0; --i)
+        if constexpr (polyOrder > 0)
+        {
+            static_assert(polyOrder <= sc_maxSpecializedEspShortRangePolyOrder);
+            SimdReal value(coefs[polyOrder - 1]);
+            for (int i = polyOrder - 2; i >= 0; --i)
+            {
+                value = fma(value, s, SimdReal(coefs[i]));
+            }
+            return value;
+        }
+
+        SimdReal value(coefs[runtimeOrder - 1]);
+        for (int i = runtimeOrder - 2; i >= 0; --i)
         {
             value = fma(value, s, SimdReal(coefs[i]));
         }
         return value;
+    }
+
+    template<int forcePolyOrder, int nR>
+    gmx_inline std::array<SimdReal, nR> espForce(const std::array<SimdReal, nR>& rSquaredV,
+                                                 const std::array<SimdReal, nR>& rInvV,
+                                                 const std::array<SimdReal, nR>& rInvExclV,
+                                                 const std::array<SimdBool, nR>& withinCutoffV) const
+    {
+        return genArr<nR>(
+                [&](int i)
+                {
+                    const SimdReal r          = rSquaredV[i] * rInvV[i];
+                    const SimdReal s          = r * espInvCutoff_;
+                    const SimdReal correction = evaluateEspPolynomial<forcePolyOrder>(
+                            espForcePolyCoeff_, espForcePolyOrder_, s);
+                    return selectByMask(fma(correction, rInvV[i], rInvExclV[i]), withinCutoffV[i]);
+                });
+    }
+
+    template<int nR>
+    gmx_inline std::array<SimdReal, nR> dispatchEspForce(const std::array<SimdReal, nR>& rSquaredV,
+                                                         const std::array<SimdReal, nR>& rInvV,
+                                                         const std::array<SimdReal, nR>& rInvExclV,
+                                                         const std::array<SimdBool, nR>& withinCutoffV) const
+    {
+#define GMX_NBNXM_ESP_FORCE_ORDER_CASE(order) \
+    case order: return espForce<order, nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV)
+
+        switch (espForcePolyOrder_)
+        {
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(1);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(2);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(3);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(4);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(5);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(6);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(7);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(8);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(9);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(10);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(11);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(12);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(13);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(14);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(15);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(16);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(17);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(18);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(19);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(20);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(21);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(22);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(23);
+            GMX_NBNXM_ESP_FORCE_ORDER_CASE(24);
+            default: return espForce<0, nR>(rSquaredV, rInvV, rInvExclV, withinCutoffV);
+        }
+
+#undef GMX_NBNXM_ESP_FORCE_ORDER_CASE
+    }
+
+    template<int energyPolyOrder, int nR, std::size_t energySize>
+    gmx_inline std::array<SimdReal, energySize>
+               espCorrectionEnergy(const std::array<SimdReal, nR>& rSquaredV,
+                                   const std::array<SimdReal, nR>& rInvV,
+                                   const std::array<SimdBool, nR>& withinCutoffV) const
+    {
+        return genArr<energySize>(
+                [&](int i)
+                {
+                    const SimdReal r = rSquaredV[i] * rInvV[i];
+                    const SimdReal s = r * espInvCutoff_;
+                    const SimdReal longRangeCorrection =
+                            evaluateEspPolynomial<energyPolyOrder>(
+                                    espEnergyPolyCoeff_, espEnergyPolyOrder_, s)
+                            * rInvV[i];
+                    return selectByMask(longRangeCorrection - espEwaldShift_, withinCutoffV[i]);
+                });
+    }
+
+    template<int nR, std::size_t energySize>
+    gmx_inline std::array<SimdReal, energySize>
+               dispatchEspCorrectionEnergy(const std::array<SimdReal, nR>& rSquaredV,
+                                           const std::array<SimdReal, nR>& rInvV,
+                                           const std::array<SimdBool, nR>& withinCutoffV) const
+    {
+#define GMX_NBNXM_ESP_ENERGY_ORDER_CASE(order) \
+    case order: return espCorrectionEnergy<order, nR, energySize>(rSquaredV, rInvV, withinCutoffV)
+
+        switch (espEnergyPolyOrder_)
+        {
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(1);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(2);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(3);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(4);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(5);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(6);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(7);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(8);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(9);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(10);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(11);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(12);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(13);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(14);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(15);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(16);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(17);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(18);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(19);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(20);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(21);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(22);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(23);
+            GMX_NBNXM_ESP_ENERGY_ORDER_CASE(24);
+            default: return espCorrectionEnergy<0, nR, energySize>(rSquaredV, rInvV, withinCutoffV);
+        }
+
+#undef GMX_NBNXM_ESP_ENERGY_ORDER_CASE
     }
 
     //! Whether this calculator evaluates ESP instead of Gaussian Ewald.

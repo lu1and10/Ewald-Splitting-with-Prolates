@@ -591,30 +591,33 @@ void fitScalarOnIntervalAdaptive(double             lower,
     *polyOrderOut = acceptedOrder;
 }
 
-struct Prolc180Calibration
-{
-    double K;
-
-    static const Prolc180Calibration& instance()
-    {
-        static const Prolc180Calibration instance = []
-        {
-            constexpr std::array<double, 4> calibrationC = { 5.0, 10.0, 15.0, 20.0 };
-            double                          logKSum      = 0.0;
-            for (double c : calibrationC)
-            {
-                const Pswf0  psi(c);
-                const double psiAtOne = std::abs(psi.eval(1.0));
-                const double kLocal   = psiAtOne / (std::sqrt(c) * std::exp(-c));
-                logKSum += std::log(kLocal);
-            }
-
-            Prolc180Calibration out;
-            out.K = std::exp(logKSum / calibrationC.size());
-            return out;
-        }();
-        return instance;
-    }
+constexpr std::array<double, 180> c_prolc180Table = {
+    0.43368E-16, 0.10048E+01, 0.17298E+01, 0.22271E+01, 0.26382E+01, 0.30035E+01, 0.33409E+01,
+    0.36598E+01, 0.39658E+01, 0.42621E+01, 0.45513E+01, 0.48347E+01, 0.51136E+01, 0.53887E+01,
+    0.56606E+01, 0.59299E+01, 0.61968E+01, 0.64616E+01, 0.67247E+01, 0.69862E+01, 0.72462E+01,
+    0.75049E+01, 0.77625E+01, 0.80189E+01, 0.82744E+01, 0.85289E+01, 0.87826E+01, 0.90355E+01,
+    0.92877E+01, 0.95392E+01, 0.97900E+01, 0.10040E+02, 0.10290E+02, 0.10539E+02, 0.10788E+02,
+    0.11036E+02, 0.11284E+02, 0.11531E+02, 0.11778E+02, 0.12024E+02, 0.12270E+02, 0.12516E+02,
+    0.12762E+02, 0.13007E+02, 0.13251E+02, 0.13496E+02, 0.13740E+02, 0.13984E+02, 0.14228E+02,
+    0.14471E+02, 0.14714E+02, 0.14957E+02, 0.15200E+02, 0.15443E+02, 0.15685E+02, 0.15927E+02,
+    0.16169E+02, 0.16411E+02, 0.16652E+02, 0.16894E+02, 0.17135E+02, 0.17376E+02, 0.17617E+02,
+    0.17858E+02, 0.18098E+02, 0.18339E+02, 0.18579E+02, 0.18819E+02, 0.19059E+02, 0.19299E+02,
+    0.19539E+02, 0.19778E+02, 0.20018E+02, 0.20257E+02, 0.20496E+02, 0.20736E+02, 0.20975E+02,
+    0.21214E+02, 0.21452E+02, 0.21691E+02, 0.21930E+02, 0.22168E+02, 0.22407E+02, 0.22645E+02,
+    0.22884E+02, 0.23122E+02, 0.23360E+02, 0.23598E+02, 0.23836E+02, 0.24074E+02, 0.24311E+02,
+    0.24549E+02, 0.24787E+02, 0.25024E+02, 0.25262E+02, 0.25499E+02, 0.25737E+02, 0.25974E+02,
+    0.26211E+02, 0.26448E+02, 0.26685E+02, 0.26922E+02, 0.27159E+02, 0.27396E+02, 0.27633E+02,
+    0.27870E+02, 0.28106E+02, 0.28343E+02, 0.28580E+02, 0.28816E+02, 0.29053E+02, 0.29289E+02,
+    0.29526E+02, 0.29762E+02, 0.29998E+02, 0.30234E+02, 0.30471E+02, 0.30707E+02, 0.30943E+02,
+    0.31179E+02, 0.31415E+02, 0.31651E+02, 0.31887E+02, 0.32123E+02, 0.32358E+02, 0.32594E+02,
+    0.32830E+02, 0.33066E+02, 0.33301E+02, 0.33537E+02, 0.33773E+02, 0.34008E+02, 0.34244E+02,
+    0.34479E+02, 0.34714E+02, 0.34950E+02, 0.35185E+02, 0.35421E+02, 0.35656E+02, 0.35891E+02,
+    0.36126E+02, 0.36362E+02, 0.36597E+02, 0.36832E+02, 0.37067E+02, 0.37302E+02, 0.37537E+02,
+    0.37772E+02, 0.38007E+02, 0.38242E+02, 0.38477E+02, 0.38712E+02, 0.38947E+02, 0.39181E+02,
+    0.39416E+02, 0.39651E+02, 0.39886E+02, 0.40120E+02, 0.40355E+02, 0.40590E+02, 0.40824E+02,
+    0.41059E+02, 0.41294E+02, 0.41528E+02, 0.41763E+02, 0.41997E+02, 0.42232E+02, 0.42466E+02,
+    0.42700E+02, 0.42935E+02, 0.43169E+02, 0.43404E+02, 0.43638E+02, 0.43872E+02, 0.44107E+02,
+    0.44341E+02, 0.44575E+02, 0.44809E+02, 0.45044E+02, 0.45278E+02
 };
 
 } // namespace
@@ -699,23 +702,11 @@ double prolc180(double tolerance)
         throw std::invalid_argument("prolc180: tolerance must be in (0, 1)");
     }
 
-    const double k = Prolc180Calibration::instance().K;
-    double       c = std::log(1.0 / tolerance) + 0.5 * std::log(std::log(1.0 / tolerance) + 1.0);
-
-    for (int iter = 0; iter < 50; ++iter)
-    {
-        const double f     = c - 0.5 * std::log(c) - std::log(k / tolerance);
-        const double fPrim = 1.0 - 0.5 / c;
-        const double delta = f / fPrim;
-        c -= delta;
-        if (std::abs(delta) < 1e-10 * std::abs(c))
-        {
-            break;
-        }
-    }
-
-    GMX_ASSERT(c > 0.0 && c < 30.0, "prolc180 result out of expected range");
-    return c;
+    const double boundedTolerance = std::max(tolerance, 1e-18);
+    const double tableIndex       = -10.0 * std::log10(boundedTolerance);
+    const int    roundedIndex     = std::clamp(
+            static_cast<int>(tableIndex + 0.1), 1, static_cast<int>(c_prolc180Table.size()));
+    return c_prolc180Table[roundedIndex - 1];
 }
 
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x)

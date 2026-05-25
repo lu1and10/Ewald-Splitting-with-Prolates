@@ -53,14 +53,11 @@ namespace gmx::esp
 namespace
 {
 
-constexpr int  c_minEspStencilOrder    = 4;
-constexpr int  c_maxEspStencilOrder    = 12;
-constexpr int  c_maxEspGridSize        = 4096;
-constexpr real c_minEspAccuracy        = 1e-7_real;
-constexpr real c_maxEspAccuracy        = 1e-2_real;
-constexpr int  c_sparseSystemMaxAtoms  = 16;
-constexpr real c_sparseSystemAccuracy  = 5e-8_real;
-constexpr real c_sparseSystemGridScale = 0.75_real;
+constexpr int  c_minEspStencilOrder = 4;
+constexpr int  c_maxEspStencilOrder = 12;
+constexpr int  c_maxEspGridSize     = 4096;
+constexpr real c_minEspAccuracy     = 1e-7_real;
+constexpr real c_maxEspAccuracy     = 1e-2_real;
 
 void checkAutotuneInput(const EspAutotuneInput& in)
 {
@@ -120,20 +117,13 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
 
     EspParameters out;
 
-    const bool useSparseSystemGuard = (in.natoms > 0 && in.natoms <= c_sparseSystemMaxAtoms);
-    const real splitAccuracy =
-            useSparseSystemGuard ? std::min(in.accuracy, c_sparseSystemAccuracy) : in.accuracy;
-    const real spreadAccuracy = useSparseSystemGuard
-                                        ? std::min(in.spreadAccuracy, real(0.5) * splitAccuracy)
-                                        : in.spreadAccuracy;
+    const real splitAccuracy  = in.accuracy;
+    const real spreadAccuracy = in.spreadAccuracy;
 
     out.c  = static_cast<real>(checkedProlc180(static_cast<double>(splitAccuracy), "split c"));
     out.c1 = static_cast<real>(checkedProlc180(static_cast<double>(spreadAccuracy), "spread c"));
     const int estimatedOrder = estimateOrder(static_cast<double>(splitAccuracy));
-    out.P                    = (in.stencilOrderOverride > 0)
-                                       ? in.stencilOrderOverride
-                                       : (useSparseSystemGuard ? std::min(estimatedOrder, c_maxEspStencilOrder)
-                                                               : estimatedOrder);
+    out.P = (in.stencilOrderOverride > 0) ? in.stencilOrderOverride : estimatedOrder;
     if (out.P < c_minEspStencilOrder || out.P > c_maxEspStencilOrder)
     {
         gmx_fatal(FARGS,
@@ -144,9 +134,8 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     }
     out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 
-    const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c
-                    * (useSparseSystemGuard ? c_sparseSystemGridScale : real(1));
-    const int minGridSize = 2 * (out.P - 1);
+    const real h0          = static_cast<real>(M_PI) * in.cutoff / out.c;
+    const int  minGridSize = 2 * (out.P - 1);
     calcFftGrid(nullptr, in.box, h0, minGridSize, &out.nx, &out.ny, &out.nz);
     if (std::max({ out.nx, out.ny, out.nz }) > c_maxEspGridSize)
     {
@@ -170,40 +159,40 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
 
     spreadRealPoly(out.P,
                    out.P_padded,
-                   static_cast<double>(in.spreadAccuracy),
-                   static_cast<double>(in.spreadAccuracy) * 0.1,
+                   static_cast<double>(spreadAccuracy),
+                   static_cast<double>(spreadAccuracy) * 0.1,
                    static_cast<double>(out.c1),
                    &out.rho_coeff,
                    &out.poly_order);
 
     spreadRealDerivativePoly(out.P,
                              out.P_padded,
-                             static_cast<double>(in.spreadAccuracy),
-                             static_cast<double>(in.spreadAccuracy) * 0.01,
+                             static_cast<double>(spreadAccuracy),
+                             static_cast<double>(spreadAccuracy) * 0.01,
                              static_cast<double>(out.c1),
                              &out.drho_coeff,
                              &out.drho_poly_order);
 
-    spreadFourierPoly(static_cast<double>(in.spreadAccuracy),
-                      static_cast<double>(in.spreadAccuracy) * 0.1,
+    spreadFourierPoly(static_cast<double>(spreadAccuracy),
+                      static_cast<double>(spreadAccuracy) * 0.1,
                       static_cast<double>(out.c1),
                       &out.spread_fourier_poly,
                       &out.spread_fourier_poly_order);
 
-    splitFourierPoly(static_cast<double>(in.accuracy),
-                     static_cast<double>(in.accuracy) * 0.1,
+    splitFourierPoly(static_cast<double>(splitAccuracy),
+                     static_cast<double>(splitAccuracy) * 0.1,
                      static_cast<double>(out.c),
                      &out.split_fourier_poly,
                      &out.split_fourier_poly_order);
 
-    shortRangeForcePoly(static_cast<double>(in.accuracy),
-                        static_cast<double>(in.accuracy) * 0.1,
+    shortRangeForcePoly(static_cast<double>(splitAccuracy),
+                        static_cast<double>(splitAccuracy) * 0.1,
                         static_cast<double>(out.c),
                         &out.short_range_force_poly,
                         &out.short_range_force_poly_order);
 
-    shortRangeEnergyPoly(static_cast<double>(in.accuracy) * 0.01,
-                         static_cast<double>(in.accuracy) * 0.001,
+    shortRangeEnergyPoly(static_cast<double>(splitAccuracy) * 0.01,
+                         static_cast<double>(splitAccuracy) * 0.001,
                          static_cast<double>(out.c),
                          &out.short_range_energy_poly,
                          &out.short_range_energy_poly_order);

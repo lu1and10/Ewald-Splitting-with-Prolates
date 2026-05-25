@@ -240,11 +240,11 @@ TEST(Prolc180, MonotoneInTolerance)
 
 TEST(Prolc180, MatchesPaper3Table2)
 {
-    EXPECT_NEAR(prolc180(1e-3), 9.5392, 0.5);
-    EXPECT_NEAR(prolc180(5e-4), 10.290, 0.5);
-    EXPECT_NEAR(prolc180(1e-4), 12.024, 0.5);
-    EXPECT_NEAR(prolc180(5e-5), 12.762, 0.6);
-    EXPECT_NEAR(prolc180(1e-5), 14.471, 0.6);
+    EXPECT_NEAR(prolc180(1e-3), 9.5392, 5e-4);
+    EXPECT_NEAR(prolc180(5e-4), 10.290, 5e-4);
+    EXPECT_NEAR(prolc180(1e-4), 12.024, 5e-4);
+    EXPECT_NEAR(prolc180(5e-5), 12.762, 5e-4);
+    EXPECT_NEAR(prolc180(1e-5), 14.471, 5e-4);
 }
 
 TEST(SplitFunction, AtZeroIsZero)

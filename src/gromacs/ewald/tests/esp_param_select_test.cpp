@@ -164,15 +164,22 @@ TEST(EspAutotune, StencilOrderMatchesLammpsIntermediateToleranceHeuristic)
     EXPECT_EQ(out.P, 7);
 }
 
-TEST(EspAutotune, SparseSystemsUseConservativeReciprocalParameters)
+TEST(EspAutotune, SparseSystemsUseSameAutotunePathAsBulkSystems)
 {
-    EspAutotuneInput in  = makeSparseIonInput(1e-4_real);
-    EspParameters    out = autotuneEsp(in, nullLogger);
+    EspAutotuneInput sparseInput = makeSparseIonInput(1e-4_real);
+    EspAutotuneInput bulkInput   = sparseInput;
+    bulkInput.natoms             = 1500;
 
-    EXPECT_EQ(out.P, 12);
-    EXPECT_GE(out.nx, 28);
-    EXPECT_GE(out.ny, 28);
-    EXPECT_GE(out.nz, 28);
+    EspParameters sparse = autotuneEsp(sparseInput, nullLogger);
+    EspParameters bulk   = autotuneEsp(bulkInput, nullLogger);
+
+    EXPECT_NEAR(sparse.c, prolc180(sparseInput.accuracy), 1e-5_real);
+    EXPECT_NEAR(sparse.c1, prolc180(sparseInput.spreadAccuracy), 1e-5_real);
+    EXPECT_EQ(sparse.P, 6);
+    EXPECT_EQ(sparse.P, bulk.P);
+    EXPECT_EQ(sparse.nx, bulk.nx);
+    EXPECT_EQ(sparse.ny, bulk.ny);
+    EXPECT_EQ(sparse.nz, bulk.nz);
 }
 
 TEST(EspAutotune, GridSpacingMatchesPiRcOverC)

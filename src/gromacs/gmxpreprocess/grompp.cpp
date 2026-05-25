@@ -2754,7 +2754,8 @@ int gmx_grompp(int argc, char* argv[])
         clear_rvec(state.box[ZZ]);
     }
 
-    if (usingFullElectrostatics(ir->coulombtype) || usingLJPme(ir->vdwtype))
+    const bool useEspElectrostatics = (ir->coulombtype == CoulombInteractionType::Esp);
+    if (!useEspElectrostatics && (usingFullElectrostatics(ir->coulombtype) || usingLJPme(ir->vdwtype)))
     {
         /* Calculate the optimal grid dimensions */
         matrix          scaledBox;

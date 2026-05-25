@@ -313,9 +313,9 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
                                       ir->espSettings.accuracy));
         }
         if (ir->espSettings.stencilOrder > 0
-            && (ir->espSettings.stencilOrder < 4 || ir->espSettings.stencilOrder > 16))
+            && (ir->espSettings.stencilOrder < 4 || ir->espSettings.stencilOrder > 12))
         {
-            wi->addError("ESP: esp-stencil-order must be in [4, 16] if explicitly set");
+            wi->addError("ESP: esp-stencil-order must be in [4, 12] if explicitly set");
         }
         if (ir->pbcType != PbcType::Xyz)
         {

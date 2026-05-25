@@ -69,7 +69,8 @@ std::string makeEspMdp(const char* pbc           = "xyz",
                        const char* ewaldGeometry = "3d",
                        const char* accuracy      = "1e-4",
                        const char* rcoulomb      = "1.0",
-                       const char* rvdw          = "1.0")
+                       const char* rvdw          = "1.0",
+                       int         stencilOrder  = 12)
 {
     std::string mdp = formatString(
             "integrator = md\n"
@@ -86,7 +87,7 @@ std::string makeEspMdp(const char* pbc           = "xyz",
             "ewald-geometry = %s\n"
             "nwall = %d\n"
             "esp-accuracy = %s\n"
-            "esp-stencil-order = 12\n"
+            "esp-stencil-order = %d\n"
             "pme-order = 16\n",
             rcoulomb,
             rvdw,
@@ -95,7 +96,8 @@ std::string makeEspMdp(const char* pbc           = "xyz",
             pressureCoupl,
             ewaldGeometry,
             nwall,
-            accuracy);
+            accuracy,
+            stencilOrder);
     if (nwall > 0)
     {
         mdp += "wall-type = 12-6\n"
@@ -152,6 +154,11 @@ TEST_F(EspMdpValidationTest, AcceptsValidMdpAndSetsAutoSpreadAccuracy)
 TEST_F(EspMdpValidationTest, ErrorsOnAccuracyOutOfRange)
 {
     EXPECT_TRUE(parseAndCheckMdp(makeEspMdp("xyz", "no", "no", 0, "3d", "1e-8")));
+}
+
+TEST_F(EspMdpValidationTest, ErrorsOnStencilOrderAboveAutotuneRange)
+{
+    EXPECT_TRUE(parseAndCheckMdp(makeEspMdp("xyz", "no", "no", 0, "3d", "1e-4", "1.0", "1.0", 13)));
 }
 
 TEST_F(EspMdpValidationTest, FatalsOnNonXyzPbc)

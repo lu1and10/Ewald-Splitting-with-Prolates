@@ -70,7 +70,8 @@ std::string makeEspMdp(const char* pbc           = "xyz",
                        const char* accuracy      = "1e-4",
                        const char* rcoulomb      = "1.0",
                        const char* rvdw          = "1.0",
-                       int         stencilOrder  = 12)
+                       int         stencilOrder  = 12,
+                       int         pmeOrder      = 12)
 {
     std::string mdp = formatString(
             "integrator = md\n"
@@ -88,7 +89,7 @@ std::string makeEspMdp(const char* pbc           = "xyz",
             "nwall = %d\n"
             "esp-accuracy = %s\n"
             "esp-stencil-order = %d\n"
-            "pme-order = 16\n",
+            "pme-order = %d\n",
             rcoulomb,
             rvdw,
             pbc,
@@ -97,7 +98,8 @@ std::string makeEspMdp(const char* pbc           = "xyz",
             ewaldGeometry,
             nwall,
             accuracy,
-            stencilOrder);
+            stencilOrder,
+            pmeOrder);
     if (nwall > 0)
     {
         mdp += "wall-type = 12-6\n"
@@ -148,7 +150,7 @@ TEST_F(EspMdpValidationTest, AcceptsValidMdpAndSetsAutoSpreadAccuracy)
     EXPECT_REAL_EQ(ir_.espSettings.accuracy, 1e-4_real);
     EXPECT_REAL_EQ(ir_.espSettings.spreadAccuracy, 5e-5_real);
     EXPECT_EQ(ir_.espSettings.stencilOrder, 12);
-    EXPECT_EQ(ir_.pme_order, 16);
+    EXPECT_EQ(ir_.pme_order, 12);
 }
 
 TEST_F(EspMdpValidationTest, ErrorsOnAccuracyOutOfRange)
@@ -159,6 +161,11 @@ TEST_F(EspMdpValidationTest, ErrorsOnAccuracyOutOfRange)
 TEST_F(EspMdpValidationTest, ErrorsOnStencilOrderAboveAutotuneRange)
 {
     EXPECT_TRUE(parseAndCheckMdp(makeEspMdp("xyz", "no", "no", 0, "3d", "1e-4", "1.0", "1.0", 13)));
+}
+
+TEST_F(EspMdpValidationTest, ErrorsOnPmeOrderAboveAutotuneRange)
+{
+    EXPECT_TRUE(parseAndCheckMdp(makeEspMdp("xyz", "no", "no", 0, "3d", "1e-4", "1.0", "1.0", 12, 13)));
 }
 
 TEST_F(EspMdpValidationTest, FatalsOnNonXyzPbc)

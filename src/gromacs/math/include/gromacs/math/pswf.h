@@ -87,7 +87,7 @@ double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);
 //! Net-charge correction coefficient R_hat_short(0) / 2 for ESP Coulomb.
 double pswfNetChargeCorrectionCoeff(const Pswf0& psi, double cutoff);
 
-//! Epsilon to stencil order P using the ESP calibration heuristic, clamped to [4, 16].
+//! Epsilon to stencil order P using the ESP calibration heuristic, clamped to [4, 12].
 int estimateOrder(double tolerance);
 
 //! Real-space spreading window polynomial table, lane-major in the inner P axis.
@@ -115,14 +115,14 @@ void spreadFourierPoly(double                                          tol,
                        std::vector<real, gmx::AlignedAllocator<real>>* coefs,
                        int*                                            polyOrderOut);
 
-//! Short-range force kernel d/dr [(1 - Phi_{r_c}(r)) / r] on [0, r_c].
+//! Smooth short-range force-correction numerator on s = r / r_c in [0, 1].
 void shortRangeForcePoly(double                                          tol,
                          double                                          r_tol,
                          double                                          c,
                          std::vector<real, gmx::AlignedAllocator<real>>* coefs,
                          int*                                            polyOrderOut);
 
-//! Short-range energy kernel (1 - Phi_{r_c}(r)) / r on [0, r_c].
+//! Smooth long-range energy-correction numerator Phi_{r_c}(r) on s = r / r_c in [0, 1].
 void shortRangeEnergyPoly(double                                          tol,
                           double                                          r_tol,
                           double                                          c,

@@ -1726,7 +1726,7 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
         // TODO: Move these checks into the ewald module with the options class
         int orderMin          = 3;
         int orderMax          = (ir->coulombtype == CoulombInteractionType::P3mAD ? 8 : 12);
-        int effectiveOrderMax = (ir->coulombtype == CoulombInteractionType::Esp ? 16 : orderMax);
+        int effectiveOrderMax = (ir->coulombtype == CoulombInteractionType::Esp ? 12 : orderMax);
 
         if (ir->pme_order < orderMin || ir->pme_order > effectiveOrderMax)
         {

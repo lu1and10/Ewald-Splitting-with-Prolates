@@ -770,7 +770,7 @@ int estimateOrder(double tolerance)
     }
 
     order = std::max(order, 4);
-    order = std::min(order, 16);
+    order = std::min(order, 12);
     return order;
 }
 

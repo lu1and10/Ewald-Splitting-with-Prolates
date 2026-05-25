@@ -289,6 +289,12 @@ TEST(EstimateOrder, MatchesLammpsIntermediateToleranceHeuristic)
     EXPECT_EQ(estimateOrder(3e-5), 7);
 }
 
+TEST(EstimateOrder, ClampsToSupportedEspStencilRange)
+{
+    EXPECT_EQ(estimateOrder(1e-8), 12);
+    EXPECT_EQ(estimateOrder(1e-9), 12);
+}
+
 TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
 {
     constexpr int    p       = 6;

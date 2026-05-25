@@ -160,14 +160,11 @@ VerletKernelTypeDict = {
 EspAnalyticalElectrostatics = ("ElecEw", "ElecEwTwinCut")
 EspSpecializedForceOrders = range(6, 23)
 EspSpecializedEnergyOrders = range(8, 23)
-EspMeasuredOrderPairs = (
-    (6, 8),
-    (9, 10),
-    (11, 13),
-    (14, 15),
-    (16, 16),
-    (18, 19),
-    (21, 21),
+EspNearDiagonalOrderPairs = tuple(
+    (force_order, energy_order)
+    for force_order in EspSpecializedForceOrders
+    for energy_order in (force_order, force_order + 1, force_order + 2)
+    if energy_order in EspSpecializedEnergyOrders
 )
 
 KernelsHeaderTemplate = read_kernel_template("kernel_simd_template.h.pre")
@@ -214,7 +211,7 @@ def make_esp_explicit_instantiations(type, elec, ljtreat, ener):
         order_pairs = [(order, 0) for order in EspSpecializedForceOrders]
         order_pairs.append((-1, 0))
     else:
-        order_pairs = list(EspMeasuredOrderPairs)
+        order_pairs = list(EspNearDiagonalOrderPairs)
         order_pairs.extend((-1, order) for order in EspSpecializedEnergyOrders)
         order_pairs.append((-1, -1))
 
@@ -300,11 +297,11 @@ def make_esp_order_tables(type):
     text += "    }\n"
     text += "}\n\n"
 
-    text += "static int nbnxmEspMeasuredOrderPairIndex{0}(const int forceOrder, const int energyOrder)\n".format(
+    text += "static int nbnxmEspNearDiagonalOrderPairIndex{0}(const int forceOrder, const int energyOrder)\n".format(
         type
     )
     text += "{\n"
-    for index, pair in enumerate(EspMeasuredOrderPairs):
+    for index, pair in enumerate(EspNearDiagonalOrderPairs):
         text += "    if (forceOrder == {0} && energyOrder == {1})\n".format(
             pair[0], pair[1]
         )
@@ -321,7 +318,10 @@ def make_esp_order_tables(type):
         type, "nbnxmKernelNoenerEspRuntimeOrderSimd", "F", -1, 0
     )
     text += make_esp_order_table(
-        type, "nbnxmKernelEnerEspMeasuredOrderPairSimd", "VF", EspMeasuredOrderPairs
+        type,
+        "nbnxmKernelEnerEspNearDiagonalOrderPairSimd",
+        "VF",
+        EspNearDiagonalOrderPairs,
     )
     text += make_esp_order_table(
         type, "nbnxmKernelEnerEspEnergyOrderSimd", "VF", energy_orders
@@ -331,9 +331,9 @@ def make_esp_order_tables(type):
     )
     text += make_esp_order_table(
         type,
-        "nbnxmKernelEnergrpEspMeasuredOrderPairSimd",
+        "nbnxmKernelEnergrpEspNearDiagonalOrderPairSimd",
         "VgrpF",
-        EspMeasuredOrderPairs,
+        EspNearDiagonalOrderPairs,
     )
     text += make_esp_order_table(
         type, "nbnxmKernelEnergrpEspEnergyOrderSimd", "VgrpF", energy_orders
@@ -380,12 +380,12 @@ def make_esp_order_tables(type):
             kernel_kind, type
         )
         text += "    }\n"
-        text += "    const int pairIndex = nbnxmEspMeasuredOrderPairIndex{0}(forceOrder, energyOrder);\n".format(
+        text += "    const int pairIndex = nbnxmEspNearDiagonalOrderPairIndex{0}(forceOrder, energyOrder);\n".format(
             type
         )
         text += "    if (pairIndex >= 0)\n"
         text += "    {\n"
-        text += "        return nbnxmKernel{0}EspMeasuredOrderPairSimd{1}[coulombIndex][pairIndex][vdwkt];\n".format(
+        text += "        return nbnxmKernel{0}EspNearDiagonalOrderPairSimd{1}[coulombIndex][pairIndex][vdwkt];\n".format(
             kernel_kind, type
         )
         text += "    }\n"

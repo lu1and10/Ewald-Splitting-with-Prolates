@@ -226,17 +226,31 @@ TEST(EspShortRangeCoulombCalculator, KernelSelectorUsesFinalOrderSpecializations
     EXPECT_EQ(selectNbnxmKernelNoenerEspSimd2xmm(coulkt, vdwkt, 25),
               nbnxmKernelNoenerEspRuntimeOrderSimd2xmm[0][vdwkt]);
 
+    const int measuredAutoPairIndex = nbnxmEspNearDiagonalOrderPairIndex2xmm(11, 13);
+    ASSERT_GE(measuredAutoPairIndex, 0);
     EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 11, 13),
-              nbnxmKernelEnerEspMeasuredOrderPairSimd2xmm[0][2][vdwkt]);
+              nbnxmKernelEnerEspNearDiagonalOrderPairSimd2xmm[0][measuredAutoPairIndex][vdwkt]);
+    const int diagonalPairIndex = nbnxmEspNearDiagonalOrderPairIndex2xmm(12, 13);
+    ASSERT_GE(diagonalPairIndex, 0);
     EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 12, 13),
-              nbnxmKernelEnerEspEnergyOrderSimd2xmm[0][13 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
+              nbnxmKernelEnerEspNearDiagonalOrderPairSimd2xmm[0][diagonalPairIndex][vdwkt]);
+    const int nearDiagonalPairIndex = nbnxmEspNearDiagonalOrderPairIndex2xmm(12, 14);
+    ASSERT_GE(nearDiagonalPairIndex, 0);
+    EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 12, 14),
+              nbnxmKernelEnerEspNearDiagonalOrderPairSimd2xmm[0][nearDiagonalPairIndex][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 12, 15),
+              nbnxmKernelEnerEspEnergyOrderSimd2xmm[0][15 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
     EXPECT_EQ(selectNbnxmKernelEnerEspSimd2xmm(coulkt, vdwkt, 25, 25),
               nbnxmKernelEnerEspRuntimeOrderSimd2xmm[0][vdwkt]);
 
     EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 11, 13),
-              nbnxmKernelEnergrpEspMeasuredOrderPairSimd2xmm[0][2][vdwkt]);
+              nbnxmKernelEnergrpEspNearDiagonalOrderPairSimd2xmm[0][measuredAutoPairIndex][vdwkt]);
     EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 12, 13),
-              nbnxmKernelEnergrpEspEnergyOrderSimd2xmm[0][13 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
+              nbnxmKernelEnergrpEspNearDiagonalOrderPairSimd2xmm[0][diagonalPairIndex][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 12, 14),
+              nbnxmKernelEnergrpEspNearDiagonalOrderPairSimd2xmm[0][nearDiagonalPairIndex][vdwkt]);
+    EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 12, 15),
+              nbnxmKernelEnergrpEspEnergyOrderSimd2xmm[0][15 - c_nbnxmEspSpecializedEnergyOrderMin2xmm][vdwkt]);
     EXPECT_EQ(selectNbnxmKernelEnergrpEspSimd2xmm(coulkt, vdwkt, 25, 25),
               nbnxmKernelEnergrpEspRuntimeOrderSimd2xmm[0][vdwkt]);
 }

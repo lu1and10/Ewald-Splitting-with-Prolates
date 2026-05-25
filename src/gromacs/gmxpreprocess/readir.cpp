@@ -305,7 +305,7 @@ void check_ir(const char* mdparin, MDModules* mdModules, t_inputrec* ir, t_gromp
     {
         if (ir->espSettings.spreadAccuracy < 0.0_real)
         {
-            ir->espSettings.spreadAccuracy = 0.25_real * ir->espSettings.accuracy;
+            ir->espSettings.spreadAccuracy = 0.5_real * ir->espSettings.accuracy;
         }
         if (ir->espSettings.accuracy < 1e-7_real || ir->espSettings.accuracy > 1e-2_real)
         {

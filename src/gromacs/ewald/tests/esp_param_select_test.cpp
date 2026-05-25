@@ -36,6 +36,10 @@
 
 #include "gromacs/ewald/esp_param_select.h"
 
+#include <cmath>
+
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 #include "gromacs/ewald/calculate_spline_moduli.h"
@@ -71,11 +75,25 @@ double fourierLambdaReference(const Pswf0& psi)
     return (sum * h / 3.0) / psi.eval(0.5);
 }
 
+double evaluateLaneMajorPolynomial(const std::vector<real, gmx::AlignedAllocator<real>>& coefs,
+                                   const int                                             order,
+                                   const int    paddedOrder,
+                                   const int    lane,
+                                   const double x)
+{
+    double value = coefs[(order - 1) * paddedOrder + lane];
+    for (int l = order - 2; l >= 0; --l)
+    {
+        value = value * x + coefs[l * paddedOrder + lane];
+    }
+    return value;
+}
+
 EspAutotuneInput makeCubicSpcEWaterInput(real eps)
 {
     EspAutotuneInput in{};
     in.accuracy             = eps;
-    in.spreadAccuracy       = 0.25_real * eps;
+    in.spreadAccuracy       = 0.5_real * eps;
     in.cutoff               = 1.0_real;
     in.box[XX][XX]          = 2.46_real;
     in.box[YY][YY]          = 2.46_real;
@@ -126,7 +144,7 @@ TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
 
 TEST(EspAutotune, TightToleranceUsesPracticalGridSelection)
 {
-    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-9_real);
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-7_real);
     in.box[XX][XX]      = 1.0_real;
     in.box[YY][YY]      = 1.0_real;
     in.box[ZZ][ZZ]      = 1.0_real;
@@ -136,6 +154,13 @@ TEST(EspAutotune, TightToleranceUsesPracticalGridSelection)
     EXPECT_GT(out.ny, 1);
     EXPECT_GT(out.nz, 1);
     EXPECT_LE(out.P, 16);
+}
+
+TEST(EspAutotune, FatalsOnUnsupportedTightAccuracy)
+{
+    EspAutotuneInput in = makeCubicSpcEWaterInput(1e-9_real);
+
+    GMX_EXPECT_DEATH_IF_SUPPORTED(autotuneEsp(in, nullLogger), "supported range");
 }
 
 TEST(EspAutotune, UsesGromacsFftGridChooser)
@@ -214,13 +239,50 @@ TEST(EspAutotune, PolynomialTablesPopulatedRealAndFourier)
 
     EXPECT_GT(out.poly_order, 0);
     EXPECT_EQ(out.rho_coeff.size(), static_cast<size_t>(out.poly_order * out.P_padded));
-    EXPECT_EQ(out.drho_coeff.size(), out.rho_coeff.size());
+    EXPECT_GT(out.drho_poly_order, 0);
+    EXPECT_EQ(out.drho_coeff.size(), static_cast<size_t>(out.drho_poly_order * out.P_padded));
     EXPECT_GT(out.spread_fourier_poly_order, 0);
     ASSERT_FALSE(out.spread_fourier_poly.empty());
 
     const Pswf0  psi(out.c1);
     const double rawWindowAtZero = fourierLambdaReference(psi) * psi.eval(0.0);
     EXPECT_NEAR(out.spread_fourier_poly[0], rawWindowAtZero, 1e-5_real);
+}
+
+TEST(EspAutotune, SpreadDerivativeTableMatchesDirectPswfDerivative)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    const Pswf0  psi(out.c1);
+    const int    derivativeOrder = out.drho_poly_order;
+    const double dsDx            = 2.0 / static_cast<double>(out.P);
+
+    ASSERT_GT(derivativeOrder, 0);
+    ASSERT_GE(out.drho_coeff.size(), static_cast<size_t>(derivativeOrder * out.P_padded));
+
+    double maxError = 0.0;
+    for (int k = 0; k < out.P; ++k)
+    {
+        const int basisIndex = out.P - k - 1;
+        for (int i = 1; i < 256; ++i)
+        {
+            const double x = static_cast<double>(i) / 256.0;
+            const double s = (x - 0.5 * static_cast<double>(out.P) + basisIndex)
+                             / (0.5 * static_cast<double>(out.P));
+            if (std::abs(s) > 0.98)
+            {
+                continue;
+            }
+            const double reference = dsDx * psi.evalDerivative(s);
+            const double polynomial =
+                    evaluateLaneMajorPolynomial(out.drho_coeff, derivativeOrder, out.P_padded, k, x);
+            maxError = std::max(maxError, std::abs(polynomial - reference));
+        }
+    }
+
+    const double acceptedTolerance = GMX_DOUBLE ? 0.5 * static_cast<double>(in.spreadAccuracy) : 1e-4;
+    EXPECT_LE(maxError, acceptedTolerance);
 }
 
 TEST(EspAutotune, AllPolynomialTablesPopulated)

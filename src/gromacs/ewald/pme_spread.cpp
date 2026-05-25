@@ -306,6 +306,24 @@ namespace
 {
 
 constexpr int c_maxSpecializedPswfPolyOrder = 16;
+constexpr int c_minSpecializedPswfOrder     = 4;
+constexpr int c_maxSpecializedPswfOrder     = 10;
+
+bool hasCompileTimePswfSpecialization(int P)
+{
+    return P >= c_minSpecializedPswfOrder && P <= c_maxSpecializedPswfOrder;
+}
+
+bool hasCompileTimePswfSpecialization(int P, int polyOrder)
+{
+    return hasCompileTimePswfSpecialization(P) && polyOrder >= P - 1 && polyOrder <= P + 3;
+}
+
+bool hasCompileTimePswfSpecialization(int P, int polyOrder, int dPolyOrder)
+{
+    return hasCompileTimePswfSpecialization(P, polyOrder) && dPolyOrder >= polyOrder
+           && dPolyOrder <= polyOrder + 2;
+}
 
 template<int P>
 constexpr int paddedPswfOrder()
@@ -320,7 +338,7 @@ void evaluatePswfPolynomialWindows(const int                    runtimePp,
                                    const std::array<real, DIM>& x,
                                    gmx::ArrayRef<real>          out)
 {
-    static_assert(P == 0 || (P >= 4 && P <= 8),
+    static_assert(P == 0 || (P >= c_minSpecializedPswfOrder && P <= c_maxSpecializedPswfOrder),
                   "This ESP spread specialization is for common CPU ESP stencils");
     static_assert(PolyOrder == 0 || (PolyOrder > 0 && PolyOrder <= c_maxSpecializedPswfPolyOrder),
                   "Unsupported compile-time PSWF polynomial order");
@@ -374,54 +392,38 @@ void makePswfsConstPolyOrder(const EspParameters& esp, const std::array<real, DI
     evaluatePswfPolynomialWindows<P, PolyOrder>(Pp, PolyOrder, esp.rho_coeff.data(), x, rho1dOut);
 }
 
-template<int P, int PolyOrder>
+template<int P, int PolyOrder, int DPolyOrder>
 void makePswfsAndDpswfsConstPolyOrder(const EspParameters&         esp,
                                       const std::array<real, DIM>& x,
                                       gmx::ArrayRef<real>          rho1dOut,
                                       gmx::ArrayRef<real>          drho1dOut)
 {
-    static_assert(PolyOrder > 1, "Derivative PSWF table needs at least a linear polynomial");
     constexpr int Pp = paddedPswfOrder<P>();
     GMX_ASSERT(esp.P == P, "ESP spread compile-time dispatch used with inconsistent P");
     GMX_ASSERT(esp.P_padded == Pp,
                "ESP spread compile-time dispatch used with inconsistent P_padded");
     GMX_ASSERT(esp.poly_order == PolyOrder,
                "ESP spread compile-time dispatch used with inconsistent polynomial order");
+    GMX_ASSERT(
+            esp.drho_poly_order == DPolyOrder,
+            "ESP spread compile-time dispatch used with inconsistent derivative polynomial order");
     evaluatePswfPolynomialWindows<P, PolyOrder>(Pp, PolyOrder, esp.rho_coeff.data(), x, rho1dOut);
-    evaluatePswfPolynomialWindows<P, PolyOrder - 1>(Pp, PolyOrder - 1, esp.drho_coeff.data(), x, drho1dOut);
+    evaluatePswfPolynomialWindows<P, DPolyOrder>(Pp, DPolyOrder, esp.drho_coeff.data(), x, drho1dOut);
 }
 
-#define GMX_ESP_SPREAD_DISPATCH_RHO(PValue, PolyValue) \
-    case PolyValue: makePswfsConstPolyOrder<PValue, PolyValue>(esp, x, rho1dOut); return true
-
-template<int P>
-bool dispatchMakePswfsForCompileTimeOrder(const EspParameters&         esp,
-                                          const std::array<real, DIM>& x,
-                                          gmx::ArrayRef<real>          rho1dOut)
-{
-    switch (esp.poly_order)
-    {
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 1);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 2);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 3);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 4);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 5);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 6);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 7);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 8);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 9);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 10);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 11);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 12);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 13);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 14);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 15);
-        GMX_ESP_SPREAD_DISPATCH_RHO(P, 16);
-        default: return false;
+#define GMX_ESP_SPREAD_TRY_RHO(PValue, PolyValue)                     \
+    if (esp.poly_order == PolyValue)                                  \
+    {                                                                 \
+        makePswfsConstPolyOrder<PValue, PolyValue>(esp, x, rho1dOut); \
+        return true;                                                  \
     }
-}
 
-#undef GMX_ESP_SPREAD_DISPATCH_RHO
+#define GMX_ESP_SPREAD_TRY_RHO_RANGE(PValue)      \
+    GMX_ESP_SPREAD_TRY_RHO(PValue, (PValue) - 1); \
+    GMX_ESP_SPREAD_TRY_RHO(PValue, (PValue));     \
+    GMX_ESP_SPREAD_TRY_RHO(PValue, (PValue) + 1); \
+    GMX_ESP_SPREAD_TRY_RHO(PValue, (PValue) + 2); \
+    GMX_ESP_SPREAD_TRY_RHO(PValue, (PValue) + 3)
 
 bool dispatchMakePswfsForCompileTimeP(const EspParameters&         esp,
                                       const std::array<real, DIM>& x,
@@ -429,48 +431,38 @@ bool dispatchMakePswfsForCompileTimeP(const EspParameters&         esp,
 {
     switch (esp.P)
     {
-        case 4: return dispatchMakePswfsForCompileTimeOrder<4>(esp, x, rho1dOut);
-        case 5: return dispatchMakePswfsForCompileTimeOrder<5>(esp, x, rho1dOut);
-        case 6: return dispatchMakePswfsForCompileTimeOrder<6>(esp, x, rho1dOut);
-        case 7: return dispatchMakePswfsForCompileTimeOrder<7>(esp, x, rho1dOut);
-        case 8: return dispatchMakePswfsForCompileTimeOrder<8>(esp, x, rho1dOut);
+        case 4: GMX_ESP_SPREAD_TRY_RHO_RANGE(4); return false;
+        case 5: GMX_ESP_SPREAD_TRY_RHO_RANGE(5); return false;
+        case 6: GMX_ESP_SPREAD_TRY_RHO_RANGE(6); return false;
+        case 7: GMX_ESP_SPREAD_TRY_RHO_RANGE(7); return false;
+        case 8: GMX_ESP_SPREAD_TRY_RHO_RANGE(8); return false;
+        case 9: GMX_ESP_SPREAD_TRY_RHO_RANGE(9); return false;
+        case 10: GMX_ESP_SPREAD_TRY_RHO_RANGE(10); return false;
         default: return false;
     }
 }
 
-#define GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(PValue, PolyValue)                               \
-    case PolyValue:                                                                       \
-        makePswfsAndDpswfsConstPolyOrder<PValue, PolyValue>(esp, x, rho1dOut, drho1dOut); \
-        return true
+#undef GMX_ESP_SPREAD_TRY_RHO_RANGE
+#undef GMX_ESP_SPREAD_TRY_RHO
 
-template<int P>
-bool dispatchMakePswfsAndDpswfsForCompileTimeOrder(const EspParameters&         esp,
-                                                   const std::array<real, DIM>& x,
-                                                   gmx::ArrayRef<real>          rho1dOut,
-                                                   gmx::ArrayRef<real>          drho1dOut)
-{
-    switch (esp.poly_order)
-    {
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 2);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 3);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 4);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 5);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 6);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 7);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 8);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 9);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 10);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 11);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 12);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 13);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 14);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 15);
-        GMX_ESP_SPREAD_DISPATCH_RHO_DRHO(P, 16);
-        default: return false;
+#define GMX_ESP_SPREAD_TRY_RHO_DRHO(PValue, PolyValue, DPolyValue)                                    \
+    if (esp.poly_order == PolyValue && esp.drho_poly_order == DPolyValue)                             \
+    {                                                                                                 \
+        makePswfsAndDpswfsConstPolyOrder<PValue, PolyValue, DPolyValue>(esp, x, rho1dOut, drho1dOut); \
+        return true;                                                                                  \
     }
-}
 
-#undef GMX_ESP_SPREAD_DISPATCH_RHO_DRHO
+#define GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, PolyValue)      \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO(PValue, PolyValue, (PolyValue));     \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO(PValue, PolyValue, (PolyValue) + 1); \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO(PValue, PolyValue, (PolyValue) + 2)
+
+#define GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(PValue)               \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, (PValue) - 1); \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, (PValue));     \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, (PValue) + 1); \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, (PValue) + 2); \
+    GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY(PValue, (PValue) + 3)
 
 bool dispatchMakePswfsAndDpswfsForCompileTimeP(const EspParameters&         esp,
                                                const std::array<real, DIM>& x,
@@ -479,21 +471,22 @@ bool dispatchMakePswfsAndDpswfsForCompileTimeP(const EspParameters&         esp,
 {
     switch (esp.P)
     {
-        case 4:
-            return dispatchMakePswfsAndDpswfsForCompileTimeOrder<4>(esp, x, rho1dOut, drho1dOut);
-        case 5:
-            return dispatchMakePswfsAndDpswfsForCompileTimeOrder<5>(esp, x, rho1dOut, drho1dOut);
-        case 6:
-            return dispatchMakePswfsAndDpswfsForCompileTimeOrder<6>(esp, x, rho1dOut, drho1dOut);
-        case 7:
-            return dispatchMakePswfsAndDpswfsForCompileTimeOrder<7>(esp, x, rho1dOut, drho1dOut);
-        case 8:
-            return dispatchMakePswfsAndDpswfsForCompileTimeOrder<8>(esp, x, rho1dOut, drho1dOut);
+        case 4: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(4); return false;
+        case 5: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(5); return false;
+        case 6: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(6); return false;
+        case 7: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(7); return false;
+        case 8: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(8); return false;
+        case 9: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(9); return false;
+        case 10: GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE(10); return false;
         default: return false;
     }
 }
 
-template<int P, int PolyOrder>
+#undef GMX_ESP_SPREAD_TRY_RHO_DRHO_RANGE
+#undef GMX_ESP_SPREAD_TRY_RHO_DRHO_FOR_POLY
+#undef GMX_ESP_SPREAD_TRY_RHO_DRHO
+
+template<int P, int PolyOrder, int DPolyOrder>
 void makePswfSplinesConstPolyOrder(gmx::ArrayRef<real*> theta,
                                    gmx::ArrayRef<real*> dtheta,
                                    const EspParameters& esp,
@@ -503,7 +496,6 @@ void makePswfSplinesConstPolyOrder(gmx::ArrayRef<real*> theta,
                                    const real           coefficient[],
                                    const bool           computeAllSplineCoefficients)
 {
-    static_assert(PolyOrder > 1, "Derivative PSWF table needs at least a linear polynomial");
     constexpr int Pp = paddedPswfOrder<P>();
 
     GMX_ASSERT(esp.P == P, "ESP spread compile-time dispatch used with inconsistent P");
@@ -511,6 +503,9 @@ void makePswfSplinesConstPolyOrder(gmx::ArrayRef<real*> theta,
                "ESP spread compile-time dispatch used with inconsistent P_padded");
     GMX_ASSERT(esp.poly_order == PolyOrder,
                "ESP spread compile-time dispatch used with inconsistent polynomial order");
+    GMX_ASSERT(
+            esp.drho_poly_order == DPolyOrder,
+            "ESP spread compile-time dispatch used with inconsistent derivative polynomial order");
 
     std::array<real, DIM * Pp> rhoScratch  = {};
     std::array<real, DIM * Pp> drhoScratch = {};
@@ -527,9 +522,9 @@ void makePswfSplinesConstPolyOrder(gmx::ArrayRef<real*> theta,
                     esp.rho_coeff.data(),
                     x,
                     gmx::arrayRefFromArray(rhoScratch.data(), rhoScratch.size()));
-            evaluatePswfPolynomialWindows<P, PolyOrder - 1>(
+            evaluatePswfPolynomialWindows<P, DPolyOrder>(
                     Pp,
-                    PolyOrder - 1,
+                    DPolyOrder,
                     esp.drho_coeff.data(),
                     x,
                     gmx::arrayRefFromArray(drhoScratch.data(), drhoScratch.size()));
@@ -545,44 +540,25 @@ void makePswfSplinesConstPolyOrder(gmx::ArrayRef<real*> theta,
     }
 }
 
-#define GMX_ESP_SPREAD_DISPATCH_SPLINES(PValue, PolyValue)                                       \
-    case PolyValue:                                                                              \
-        makePswfSplinesConstPolyOrder<PValue, PolyValue>(                                        \
+#define GMX_ESP_SPREAD_TRY_SPLINES(PValue, PolyValue, DPolyValue)                                \
+    if (esp.poly_order == PolyValue && esp.drho_poly_order == DPolyValue)                        \
+    {                                                                                            \
+        makePswfSplinesConstPolyOrder<PValue, PolyValue, DPolyValue>(                            \
                 theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients); \
-        return true
-
-template<int P>
-bool dispatchMakePswfSplinesForCompileTimeOrder(gmx::ArrayRef<real*> theta,
-                                                gmx::ArrayRef<real*> dtheta,
-                                                const EspParameters& esp,
-                                                rvec                 fractx[],
-                                                int                  nr,
-                                                const int            ind[],
-                                                const real           coefficient[],
-                                                const bool           computeAllSplineCoefficients)
-{
-    switch (esp.poly_order)
-    {
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 2);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 3);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 4);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 5);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 6);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 7);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 8);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 9);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 10);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 11);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 12);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 13);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 14);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 15);
-        GMX_ESP_SPREAD_DISPATCH_SPLINES(P, 16);
-        default: return false;
+        return true;                                                                             \
     }
-}
 
-#undef GMX_ESP_SPREAD_DISPATCH_SPLINES
+#define GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, PolyValue)      \
+    GMX_ESP_SPREAD_TRY_SPLINES(PValue, PolyValue, (PolyValue));     \
+    GMX_ESP_SPREAD_TRY_SPLINES(PValue, PolyValue, (PolyValue) + 1); \
+    GMX_ESP_SPREAD_TRY_SPLINES(PValue, PolyValue, (PolyValue) + 2)
+
+#define GMX_ESP_SPREAD_TRY_SPLINES_RANGE(PValue)               \
+    GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, (PValue) - 1); \
+    GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, (PValue));     \
+    GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, (PValue) + 1); \
+    GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, (PValue) + 2); \
+    GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY(PValue, (PValue) + 3)
 
 bool dispatchMakePswfSplinesForCompileTimeP(gmx::ArrayRef<real*> theta,
                                             gmx::ArrayRef<real*> dtheta,
@@ -595,24 +571,20 @@ bool dispatchMakePswfSplinesForCompileTimeP(gmx::ArrayRef<real*> theta,
 {
     switch (esp.P)
     {
-        case 4:
-            return dispatchMakePswfSplinesForCompileTimeOrder<4>(
-                    theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients);
-        case 5:
-            return dispatchMakePswfSplinesForCompileTimeOrder<5>(
-                    theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients);
-        case 6:
-            return dispatchMakePswfSplinesForCompileTimeOrder<6>(
-                    theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients);
-        case 7:
-            return dispatchMakePswfSplinesForCompileTimeOrder<7>(
-                    theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients);
-        case 8:
-            return dispatchMakePswfSplinesForCompileTimeOrder<8>(
-                    theta, dtheta, esp, fractx, nr, ind, coefficient, computeAllSplineCoefficients);
+        case 4: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(4); return false;
+        case 5: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(5); return false;
+        case 6: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(6); return false;
+        case 7: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(7); return false;
+        case 8: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(8); return false;
+        case 9: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(9); return false;
+        case 10: GMX_ESP_SPREAD_TRY_SPLINES_RANGE(10); return false;
         default: return false;
     }
 }
+
+#undef GMX_ESP_SPREAD_TRY_SPLINES_RANGE
+#undef GMX_ESP_SPREAD_TRY_SPLINES_FOR_POLY
+#undef GMX_ESP_SPREAD_TRY_SPLINES
 
 } // namespace
 
@@ -643,7 +615,17 @@ void make_pswfs(const gmx_pme_t* pme, real fx, real fy, real fz, gmx::ArrayRef<r
 
 bool make_pswfs_has_compile_time_specialization(int P)
 {
-    return P >= 4 && P <= 8;
+    return hasCompileTimePswfSpecialization(P);
+}
+
+bool make_pswfs_has_compile_time_specialization(int P, int polyOrder)
+{
+    return hasCompileTimePswfSpecialization(P, polyOrder);
+}
+
+bool make_pswfs_has_compile_time_specialization(int P, int polyOrder, int dPolyOrder)
+{
+    return hasCompileTimePswfSpecialization(P, polyOrder, dPolyOrder);
 }
 
 void make_pswfs_and_dpswfs(const gmx_pme_t*    pme,
@@ -658,13 +640,13 @@ void make_pswfs_and_dpswfs(const gmx_pme_t*    pme,
     const int            P          = esp.P;
     const int            Pp         = esp.P_padded;
     const int            polyOrder  = esp.poly_order;
-    const int            dPolyOrder = esp.poly_order - 1;
+    const int            dPolyOrder = esp.drho_poly_order;
 
     GMX_ASSERT(P > 0, "ESP spread requires positive stencil order");
     GMX_ASSERT(Pp >= P, "ESP spread requires P_padded >= P");
     GMX_ASSERT(Pp % GMX_SIMD_REAL_WIDTH == 0, "ESP spread requires SIMD-aligned P_padded");
     GMX_ASSERT(polyOrder > 0, "ESP spread requires a positive polynomial order");
-    GMX_ASSERT(dPolyOrder > 0, "ESP spread derivative requires at least a linear polynomial");
+    GMX_ASSERT(dPolyOrder > 0, "ESP spread derivative requires a positive polynomial order");
     GMX_ASSERT(esp.rho_coeff.size() >= static_cast<size_t>(polyOrder * Pp),
                "ESP spread coefficient table is too small");
     GMX_ASSERT(esp.drho_coeff.size() >= static_cast<size_t>(dPolyOrder * Pp),
@@ -719,7 +701,7 @@ static void make_pswf_splines(gmx::ArrayRef<real*> theta,
                                           x,
                                           gmx::arrayRefFromArray(rhoScratchData, rhoScratch.size()));
             evaluatePswfPolynomialWindows(Pp,
-                                          esp.poly_order - 1,
+                                          esp.drho_poly_order,
                                           esp.drho_coeff.data(),
                                           x,
                                           gmx::arrayRefFromArray(drhoScratchData, drhoScratch.size()));

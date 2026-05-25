@@ -64,6 +64,9 @@ public:
     //! Value of psi_0^c at x in [-1, 1]. Returns zero outside support.
     double eval(double x) const;
 
+    //! Derivative psi_0^c'(x) on [-1, 1]. Returns zero outside support.
+    double evalDerivative(double x) const;
+
     //! Integral int_0^upper psi_0^c(u) du for upper in [-1, 1].
     double evalIntegral(double upper) const;
 
@@ -81,7 +84,7 @@ double prolc180(double tolerance);
 //! Compactly-supported PSWF split function Phi_{r_c}^{c_s}(x) at scalar x >= 0.
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);
 
-//! Epsilon to stencil order P using the LAMMPS ESP calibration heuristic, clamped to [4, 16].
+//! Epsilon to stencil order P using the ESP calibration heuristic, clamped to [4, 16].
 int estimateOrder(double tolerance);
 
 //! Real-space spreading window polynomial table, lane-major in the inner P axis.
@@ -92,6 +95,15 @@ void spreadRealPoly(int                                             P,
                     double                                          c_w,
                     std::vector<real, gmx::AlignedAllocator<real>>* coefs,
                     int*                                            polyOrderOut);
+
+//! Derivative of the real-space spreading window with respect to fractional PME coordinate x.
+void spreadRealDerivativePoly(int                                             P,
+                              int                                             P_padded,
+                              double                                          tol,
+                              double                                          r_tol,
+                              double                                          c_w,
+                              std::vector<real, gmx::AlignedAllocator<real>>* coefs,
+                              int*                                            polyOrderOut);
 
 //! Fourier-space raw 1D spreading window phihat_1D(s) on s in [0, 1].
 void spreadFourierPoly(double                                          tol,

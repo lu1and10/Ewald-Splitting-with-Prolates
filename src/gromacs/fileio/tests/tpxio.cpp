@@ -27,6 +27,9 @@
  * derived work must not be called official GROMACS. Details are found
  * in the README & COPYING files - if they are missing, get the
  * official version at https://www.gromacs.org.
+ *
+ * To help us fund GROMACS development, we humbly ask that you cite
+ * the research papers on the package. Check out https://www.gromacs.org.
  */
 /*! \internal \file
  * \brief
@@ -100,6 +103,7 @@ TEST(TpxIoEsp, RoundTripsEspParameters)
     ir.espParams.nz                           = 36;
     ir.espParams.poly_order                   = 4;
     ir.espParams.rho_coeff                    = { 0.125_real, 0.25_real, 0.5_real, 1.0_real };
+    ir.espParams.drho_poly_order              = 3;
     ir.espParams.drho_coeff                   = { -0.375_real, -0.25_real, -0.125_real, 0.0_real };
     ir.espParams.split_fourier_poly_order     = 3;
     ir.espParams.split_fourier_poly           = { 1.0_real, -0.5_real, 0.25_real };
@@ -137,6 +141,8 @@ TEST(TpxIoEsp, RoundTripsEspParameters)
     EXPECT_REAL_EQ(irRead.espParams.lambda0, ir.espParams.lambda0);
     EXPECT_REAL_EQ(irRead.espParams.selfCoeff, ir.espParams.selfCoeff);
     EXPECT_REAL_EQ(irRead.espParams.c1, ir.espParams.c1);
+    EXPECT_EQ(irRead.espParams.poly_order, ir.espParams.poly_order);
+    EXPECT_EQ(irRead.espParams.drho_poly_order, ir.espParams.drho_poly_order);
     EXPECT_THAT(irRead.espParams.rho_coeff, ::testing::ElementsAreArray(ir.espParams.rho_coeff));
     EXPECT_THAT(irRead.espParams.drho_coeff, ::testing::ElementsAreArray(ir.espParams.drho_coeff));
     EXPECT_THAT(irRead.espParams.split_fourier_poly,

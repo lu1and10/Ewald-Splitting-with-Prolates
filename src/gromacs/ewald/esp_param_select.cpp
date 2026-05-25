@@ -53,16 +53,20 @@ namespace gmx::esp
 namespace
 {
 
-constexpr int c_minEspStencilOrder = 4;
-constexpr int c_maxEspStencilOrder = 16;
-constexpr int c_maxEspGridSize     = 4096;
+constexpr int  c_minEspStencilOrder = 4;
+constexpr int  c_maxEspStencilOrder = 16;
+constexpr int  c_maxEspGridSize     = 4096;
+constexpr real c_minEspAccuracy     = 1e-7_real;
+constexpr real c_maxEspAccuracy     = 1e-2_real;
 
 void checkAutotuneInput(const EspAutotuneInput& in)
 {
-    if (!std::isfinite(in.accuracy) || in.accuracy <= 0.0_real || in.accuracy >= 1.0_real)
+    if (!std::isfinite(in.accuracy) || in.accuracy < c_minEspAccuracy || in.accuracy > c_maxEspAccuracy)
     {
         gmx_fatal(FARGS,
-                  "ESP autotune accuracy must be finite and in (0, 1), got %g",
+                  "ESP autotune accuracy must be finite and in supported range [%g, %g], got %g",
+                  static_cast<double>(c_minEspAccuracy),
+                  static_cast<double>(c_maxEspAccuracy),
                   static_cast<double>(in.accuracy));
     }
     if (!std::isfinite(in.spreadAccuracy) || in.spreadAccuracy <= 0.0_real || in.spreadAccuracy >= 1.0_real)
@@ -156,15 +160,13 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
                    &out.rho_coeff,
                    &out.poly_order);
 
-    out.drho_coeff.assign(static_cast<size_t>(out.poly_order) * out.P_padded, 0.0_real);
-    for (int l = 0; l < out.poly_order - 1; ++l)
-    {
-        const real scale = static_cast<real>(l + 1);
-        for (int k = 0; k < out.P_padded; ++k)
-        {
-            out.drho_coeff[l * out.P_padded + k] = scale * out.rho_coeff[(l + 1) * out.P_padded + k];
-        }
-    }
+    spreadRealDerivativePoly(out.P,
+                             out.P_padded,
+                             static_cast<double>(in.spreadAccuracy),
+                             static_cast<double>(in.spreadAccuracy) * 0.01,
+                             static_cast<double>(out.c1),
+                             &out.drho_coeff,
+                             &out.drho_poly_order);
 
     spreadFourierPoly(static_cast<double>(in.spreadAccuracy),
                       static_cast<double>(in.spreadAccuracy) * 0.1,

@@ -1975,6 +1975,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
 
             serializer->doInt(&ir->espParams.poly_order);
             serializeEspRealVector(serializer, &ir->espParams.rho_coeff);
+            serializer->doInt(&ir->espParams.drho_poly_order);
             serializeEspRealVector(serializer, &ir->espParams.drho_coeff);
 
             serializer->doInt(&ir->espParams.split_fourier_poly_order);

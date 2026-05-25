@@ -123,6 +123,13 @@ double spreadRealPolynomialValue(const RealAlignedVector& coefs,
     return value;
 }
 
+double spreadRealDerivativeReference(const Pswf0& psi, const int p, const int k, const double x)
+{
+    const int basisIndex = p - k - 1;
+    const double s = (x - 0.5 * static_cast<double>(p) + basisIndex) / (0.5 * static_cast<double>(p));
+    return (2.0 / static_cast<double>(p)) * psi.evalDerivative(s);
+}
+
 double polynomialValue(const RealAlignedVector& coefs, const int polyOrder, const double x)
 {
     double value = coefs[polyOrder - 1];
@@ -160,6 +167,24 @@ TEST(Pswf0, EvalReturnsZeroOutsideSupport)
     Pswf0 psi(5.0);
     EXPECT_DOUBLE_EQ(psi.eval(1.5), 0.0);
     EXPECT_DOUBLE_EQ(psi.eval(-2.0), 0.0);
+}
+
+TEST(Pswf0, EvalDerivativeIsOdd)
+{
+    Pswf0 psi(8.0);
+    EXPECT_NEAR(psi.evalDerivative(0.0), 0.0, 1e-12);
+    EXPECT_NEAR(psi.evalDerivative(0.3), -psi.evalDerivative(-0.3), 1e-10);
+}
+
+TEST(Pswf0, EvalDerivativeMatchesFiniteDifference)
+{
+    Pswf0        psi(12.024);
+    const double x    = 0.37;
+    const double step = 1e-6;
+
+    const double finiteDifference = (psi.eval(x + step) - psi.eval(x - step)) / (2.0 * step);
+
+    EXPECT_NEAR(psi.evalDerivative(x), finiteDifference, 1e-8);
 }
 
 TEST(Pswf0, MatchesMpmathRefdataAt50Digits)
@@ -282,9 +307,9 @@ TEST(SpreadRealPoly, AccuracyVsGromacsPmeFractionConvention)
     {
         for (double x : { 0.05, 0.25, 0.5, 0.75, 0.95 })
         {
-            const int    tkmBasisIndex = p - k - 1;
-            const double s             = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
-                             / (0.5 * static_cast<double>(p));
+            const int    basisIndex = p - k - 1;
+            const double s =
+                    (x - 0.5 * static_cast<double>(p) + basisIndex) / (0.5 * static_cast<double>(p));
             const double ref = psi.eval(s);
 
             const double poly = spreadRealPolynomialValue(coefs, polyOrder, pPadded, k, x);
@@ -346,12 +371,42 @@ TEST(SpreadRealPoly, RepresentativeTolerancesBoundDenseSamples)
         {
             for (int i = 0; i <= 128; ++i)
             {
-                const double x             = static_cast<double>(i) / 128.0;
-                const int    tkmBasisIndex = p - k - 1;
-                const double s             = (x - 0.5 * static_cast<double>(p) + tkmBasisIndex)
+                const double x          = static_cast<double>(i) / 128.0;
+                const int    basisIndex = p - k - 1;
+                const double s          = (x - 0.5 * static_cast<double>(p) + basisIndex)
                                  / (0.5 * static_cast<double>(p));
                 const double error = std::abs(
                         spreadRealPolynomialValue(coefs, polyOrder, pPadded, k, x) - psi.eval(s));
+                maxError = std::max(maxError, error);
+            }
+        }
+
+        const double acceptedTolerance = GMX_DOUBLE ? 1.01 * tolerance : std::max(1.01 * tolerance, 5e-5);
+        EXPECT_LE(maxError, acceptedTolerance) << "tolerance=" << tolerance << " order=" << polyOrder;
+    }
+}
+
+TEST(SpreadRealDerivativePoly, RepresentativeTolerancesBoundDenseSamples)
+{
+    constexpr int    p       = 6;
+    constexpr int    pPadded = 8;
+    constexpr double cWindow = 14.471;
+
+    const Pswf0 psi(cWindow);
+    for (const double tolerance : { 1e-2, 1e-4, 1e-7 })
+    {
+        RealAlignedVector coefs;
+        int               polyOrder = 0;
+        spreadRealDerivativePoly(p, pPadded, tolerance, 0.1 * tolerance, cWindow, &coefs, &polyOrder);
+
+        double maxError = 0.0;
+        for (int k = 0; k < p; ++k)
+        {
+            for (int i = 0; i <= 128; ++i)
+            {
+                const double x = static_cast<double>(i) / 128.0;
+                const double error = std::abs(spreadRealPolynomialValue(coefs, polyOrder, pPadded, k, x)
+                                              - spreadRealDerivativeReference(psi, p, k, x));
                 maxError = std::max(maxError, error);
             }
         }

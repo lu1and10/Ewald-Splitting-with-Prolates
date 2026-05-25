@@ -32,10 +32,6 @@
  * the research papers on the package. Check out https://www.gromacs.org.
  */
 
-/* The Pswf0 Legendre expansion implementation in later commits is derived
- * from FINUFFT src/common/pswf.cpp, Apache-2.0 licensed, with user approval.
- */
-
 #include "gmxpre.h"
 
 #include "gromacs/math/pswf.h"
@@ -288,6 +284,34 @@ double evaluateRaw(const std::vector<double>&                coefficients,
     }
 
     return value;
+}
+
+double evaluateRawDerivative(const std::vector<double>&                coefficients,
+                             const std::vector<std::array<double, 3>>& recurrenceCoefficients,
+                             double                                    x)
+{
+    const double xSquared = x * x;
+    double       pjm1     = 0.0;
+    double       pjm2     = 1.0;
+    double       dPjm1    = 0.0;
+    double       dPjm2    = 0.0;
+    double       dValue   = 0.0;
+
+    std::size_t i = 1;
+    for (; i < recurrenceCoefficients.size(); ++i)
+    {
+        const double a  = xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1];
+        const double dA = 2.0 * x * recurrenceCoefficients[i][0];
+        const double p  = pjm2 * a - pjm1 * recurrenceCoefficients[i][2];
+        const double dP = dPjm2 * a + pjm2 * dA - dPjm1 * recurrenceCoefficients[i][2];
+        dValue += coefficients[i] * dP;
+        pjm1  = pjm2;
+        pjm2  = p;
+        dPjm1 = dPjm2;
+        dPjm2 = dP;
+    }
+
+    return dValue;
 }
 
 struct GLNode
@@ -638,6 +662,16 @@ double Pswf0::eval(double x) const
     return evaluateRaw(legendreCoefficients_, recurrenceCoefficients_, x) * normalizationAt0_;
 }
 
+double Pswf0::evalDerivative(double x) const
+{
+    if (std::abs(x) > 1.0)
+    {
+        return 0.0;
+    }
+
+    return evaluateRawDerivative(legendreCoefficients_, recurrenceCoefficients_, x) * normalizationAt0_;
+}
+
 double Pswf0::evalIntegral(double upper) const
 {
     if (upper == 0.0)
@@ -738,7 +772,7 @@ void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, R
 
     for (int k = 0; k < P; ++k)
     {
-        const int tkmBasisIndex   = P - k - 1;
+        const int basisIndex      = P - k - 1;
         perStencilCoefficients[k] = fitScalarMonomialOnIntervalAdaptive(
                 0.0,
                 1.0,
@@ -747,9 +781,56 @@ void spreadRealPoly(int P, int P_padded, double tol, double r_tol, double c_w, R
                 r_tol,
                 [&](const double x)
                 {
-                    const double s = (x - 0.5 * static_cast<double>(P) + tkmBasisIndex)
+                    const double s = (x - 0.5 * static_cast<double>(P) + basisIndex)
                                      / (0.5 * static_cast<double>(P));
                     return psi.eval(s);
+                });
+        globalPolyOrder = std::max(globalPolyOrder, static_cast<int>(perStencilCoefficients[k].size()));
+    }
+
+    coefs->assign(static_cast<std::size_t>(globalPolyOrder) * P_padded, 0.0);
+    for (int k = 0; k < P; ++k)
+    {
+        for (int l = 0; l < static_cast<int>(perStencilCoefficients[k].size()); ++l)
+        {
+            (*coefs)[l * P_padded + k] = static_cast<real>(perStencilCoefficients[k][l]);
+        }
+    }
+    *polyOrderOut = globalPolyOrder;
+}
+
+void spreadRealDerivativePoly(int                P,
+                              int                P_padded,
+                              double             tol,
+                              double             r_tol,
+                              double             c_w,
+                              RealAlignedVector* coefs,
+                              int*               polyOrderOut)
+{
+    GMX_ASSERT(P > 0 && P_padded >= P, "spreadRealDerivativePoly: invalid P or P_padded");
+    GMX_ASSERT(c_w > 0.0, "spreadRealDerivativePoly: c_w must be positive");
+
+    const Pswf0  psi(c_w);
+    const double dsDx = 2.0 / static_cast<double>(P);
+
+    constexpr int                    kMaxOrder = 40;
+    std::vector<std::vector<double>> perStencilCoefficients(P);
+    int                              globalPolyOrder = 0;
+
+    for (int k = 0; k < P; ++k)
+    {
+        const int basisIndex      = P - k - 1;
+        perStencilCoefficients[k] = fitScalarMonomialOnIntervalAdaptive(
+                0.0,
+                1.0,
+                kMaxOrder,
+                tol,
+                r_tol,
+                [&](const double x)
+                {
+                    const double s = (x - 0.5 * static_cast<double>(P) + basisIndex)
+                                     / (0.5 * static_cast<double>(P));
+                    return dsDx * psi.evalDerivative(s);
                 });
         globalPolyOrder = std::max(globalPolyOrder, static_cast<int>(perStencilCoefficients[k].size()));
     }

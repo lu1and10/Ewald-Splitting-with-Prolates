@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright 2026 The GROMACS Authors
+ * Copyright 2016- The GROMACS Authors
  * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
  * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
@@ -19,6 +19,14 @@
  * License along with GROMACS; if not, see
  * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
+ *
+ * If you want to redistribute modifications to GROMACS, please
+ * consider that scientific software is very special. Version
+ * control is crucial - bugs must be traceable. We will be happy to
+ * consider code for inclusion in the official distribution, but
+ * derived work must not be called official GROMACS. Details are found
+ * in the README & COPYING files - if they are missing, get the
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
  * the research papers on the package. Check out https://www.gromacs.org.
@@ -82,14 +90,15 @@ EspParameters makeHornerEsp()
     return esp;
 }
 
-EspParameters makeHornerEsp(int P, int polyOrder)
+EspParameters makeHornerEsp(int P, int polyOrder, int dPolyOrder)
 {
     EspParameters esp;
-    esp.P          = P;
-    esp.P_padded   = paddedOrder(esp.P);
-    esp.poly_order = polyOrder;
+    esp.P               = P;
+    esp.P_padded        = paddedOrder(esp.P);
+    esp.poly_order      = polyOrder;
+    esp.drho_poly_order = dPolyOrder;
     esp.rho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
-    esp.drho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
+    esp.drho_coeff.resize(esp.drho_poly_order * esp.P_padded, real(0));
 
     for (int order = 0; order < esp.poly_order; ++order)
     {
@@ -100,15 +109,20 @@ EspParameters makeHornerEsp(int P, int polyOrder)
         }
     }
 
-    for (int order = 0; order < esp.poly_order - 1; ++order)
+    for (int order = 0; order < esp.drho_poly_order; ++order)
     {
         for (int k = 0; k < esp.P; ++k)
         {
             esp.drho_coeff[order * esp.P_padded + k] =
-                    real(order + 1) * esp.rho_coeff[(order + 1) * esp.P_padded + k];
+                    real(0.03) * real(order + 1) + real(0.015) * real(k + 1);
         }
     }
     return esp;
+}
+
+EspParameters makeHornerEsp(int P, int polyOrder)
+{
+    return makeHornerEsp(P, polyOrder, polyOrder - 1);
 }
 
 std::vector<real> evaluateWithMakePswfs(const EspParameters& esp, real fx, real fy, real fz)
@@ -133,7 +147,7 @@ real scalarHorner(const EspParameters& esp, real x, int k)
 
 real scalarDerivativeHorner(const EspParameters& esp, real x, int k)
 {
-    const int dPolyOrder = esp.poly_order - 1;
+    const int dPolyOrder = esp.drho_poly_order;
     real      value      = esp.drho_coeff[(dPolyOrder - 1) * esp.P_padded + k];
     for (int order = dPolyOrder - 2; order >= 0; --order)
     {
@@ -192,29 +206,84 @@ TEST(EspSpread, PaddingDoesNotPollute)
 
 TEST(EspSpread, CompileTimeDispatchCoverageIncludesEspOrders)
 {
-    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(4));
-    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(5));
-    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(6));
-    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(7));
-    EXPECT_TRUE(make_pswfs_has_compile_time_specialization(8));
-    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(9));
+    for (int P = 4; P <= 10; ++P)
+    {
+        EXPECT_TRUE(make_pswfs_has_compile_time_specialization(P)) << "P=" << P;
+        for (int polyOrder = P - 1; polyOrder <= P + 3; ++polyOrder)
+        {
+            EXPECT_TRUE(make_pswfs_has_compile_time_specialization(P, polyOrder))
+                    << "P=" << P << " polyOrder=" << polyOrder;
+            for (int dPolyOrder = polyOrder; dPolyOrder <= polyOrder + 2; ++dPolyOrder)
+            {
+                EXPECT_TRUE(make_pswfs_has_compile_time_specialization(P, polyOrder, dPolyOrder))
+                        << "P=" << P << " polyOrder=" << polyOrder << " dPolyOrder=" << dPolyOrder;
+            }
+        }
+    }
+
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(3));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(11));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(4, 2));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(4, 8));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(4, 3, 2));
+    EXPECT_FALSE(make_pswfs_has_compile_time_specialization(4, 3, 6));
 }
 
 TEST(EspSpread, CompileTimeDispatchMatchesScalarForEspOrders)
 {
     const std::array<real, DIM> x = { real(0.19), real(0.43), real(0.77) };
 
-    for (int P = 4; P <= 8; ++P)
+    for (int P = 4; P <= 10; ++P)
     {
-        const EspParameters     esp = makeHornerEsp(P, 6);
-        const std::vector<real> rho = evaluateWithMakePswfs(esp, x[XX], x[YY], x[ZZ]);
-
-        for (int dim = 0; dim < DIM; ++dim)
+        for (int polyOrder = P - 1; polyOrder <= P + 3; ++polyOrder)
         {
-            for (int k = 0; k < esp.P_padded; ++k)
+            const EspParameters     esp = makeHornerEsp(P, polyOrder);
+            const std::vector<real> rho = evaluateWithMakePswfs(esp, x[XX], x[YY], x[ZZ]);
+
+            for (int dim = 0; dim < DIM; ++dim)
             {
-                EXPECT_NEAR(rho[dim * esp.P_padded + k], scalarHorner(esp, x[dim], k), real(1e-6))
-                        << "P=" << P << " dim=" << dim << " k=" << k;
+                for (int k = 0; k < esp.P_padded; ++k)
+                {
+                    EXPECT_NEAR(rho[dim * esp.P_padded + k], scalarHorner(esp, x[dim], k), real(1e-6))
+                            << "P=" << P << " polyOrder=" << polyOrder << " dim=" << dim << " k=" << k;
+                }
+            }
+        }
+    }
+}
+
+TEST(EspSpread, CompileTimeDerivativeDispatchMatchesScalarForEspOrders)
+{
+    const std::array<real, DIM> x = { real(0.17), real(0.39), real(0.83) };
+
+    for (int P = 4; P <= 10; ++P)
+    {
+        for (int polyOrder = P - 1; polyOrder <= P + 3; ++polyOrder)
+        {
+            for (int dPolyOrder = polyOrder; dPolyOrder <= polyOrder + 2; ++dPolyOrder)
+            {
+                const EspParameters esp = makeHornerEsp(P, polyOrder, dPolyOrder);
+
+                gmx_pme_t pme(nullptr);
+                pme.espRuntime = esp;
+
+                std::vector<real> rho(DIM * esp.P_padded, real(0));
+                std::vector<real> drho(DIM * esp.P_padded, real(0));
+                make_pswfs_and_dpswfs(
+                        &pme, x[XX], x[YY], x[ZZ], gmx::makeArrayRef(rho), gmx::makeArrayRef(drho));
+
+                for (int dim = 0; dim < DIM; ++dim)
+                {
+                    for (int k = 0; k < esp.P_padded; ++k)
+                    {
+                        EXPECT_NEAR(rho[dim * esp.P_padded + k], scalarHorner(esp, x[dim], k), real(1e-6))
+                                << "P=" << P << " polyOrder=" << polyOrder
+                                << " dPolyOrder=" << dPolyOrder << " dim=" << dim << " k=" << k;
+                        EXPECT_NEAR(drho[dim * esp.P_padded + k], scalarDerivativeHorner(esp, x[dim], k), real(1e-6))
+                                << "P=" << P << " polyOrder=" << polyOrder
+                                << " dPolyOrder=" << dPolyOrder << " dim=" << dim << " k=" << k;
+                    }
+                }
             }
         }
     }
@@ -238,9 +307,10 @@ TEST(EspSpread, RuntimeFallbackMatchesScalarAboveSpecializedPolyOrder)
 
 TEST(EspSpread, EagerDerivativeMatchesScalarReference)
 {
-    EspParameters esp = makeHornerEsp();
-    esp.drho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
-    for (int order = 0; order < esp.poly_order - 1; ++order)
+    EspParameters esp   = makeHornerEsp();
+    esp.drho_poly_order = esp.poly_order - 1;
+    esp.drho_coeff.resize(esp.drho_poly_order * esp.P_padded, real(0));
+    for (int order = 0; order < esp.drho_poly_order; ++order)
     {
         for (int k = 0; k < esp.P; ++k)
         {

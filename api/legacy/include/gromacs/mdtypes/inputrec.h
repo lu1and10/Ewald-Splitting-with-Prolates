@@ -98,8 +98,9 @@ struct EspParameters
     int nx = 0, ny = 0, nz = 0;
 
     std::vector<real, gmx::AlignedAllocator<real>> rho_coeff;
-    std::vector<real, gmx::AlignedAllocator<real>> drho_coeff;
     int                                            poly_order = 0;
+    std::vector<real, gmx::AlignedAllocator<real>> drho_coeff;
+    int                                            drho_poly_order = 0;
     std::vector<real, gmx::AlignedAllocator<real>> split_fourier_poly;
     int                                            split_fourier_poly_order = 0;
     std::vector<real, gmx::AlignedAllocator<real>> spread_fourier_poly;

@@ -1,7 +1,7 @@
 /*
  * This file is part of the GROMACS molecular simulation package.
  *
- * Copyright 2026 The GROMACS Authors
+ * Copyright 2016- The GROMACS Authors
  * and the project initiators Erik Lindahl, Berk Hess and David van der Spoel.
  * Consult the AUTHORS/COPYING files and https://www.gromacs.org for details.
  *
@@ -19,6 +19,14 @@
  * License along with GROMACS; if not, see
  * https://www.gnu.org/licenses, or write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA.
+ *
+ * If you want to redistribute modifications to GROMACS, please
+ * consider that scientific software is very special. Version
+ * control is crucial - bugs must be traceable. We will be happy to
+ * consider code for inclusion in the official distribution, but
+ * derived work must not be called official GROMACS. Details are found
+ * in the README & COPYING files - if they are missing, get the
+ * official version at https://www.gromacs.org.
  *
  * To help us fund GROMACS development, we humbly ask that you cite
  * the research papers on the package. Check out https://www.gromacs.org.
@@ -51,11 +59,12 @@ int paddedOrder(int P)
 EspParameters makeDerivativeEsp()
 {
     EspParameters esp;
-    esp.P          = 5;
-    esp.P_padded   = paddedOrder(esp.P);
-    esp.poly_order = 4;
+    esp.P               = 5;
+    esp.P_padded        = paddedOrder(esp.P);
+    esp.poly_order      = 4;
+    esp.drho_poly_order = esp.poly_order - 1;
     esp.rho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
-    esp.drho_coeff.resize(esp.poly_order * esp.P_padded, real(0));
+    esp.drho_coeff.resize(esp.drho_poly_order * esp.P_padded, real(0));
 
     for (int order = 0; order < esp.poly_order; ++order)
     {
@@ -66,7 +75,7 @@ EspParameters makeDerivativeEsp()
         }
     }
 
-    for (int order = 0; order < esp.poly_order - 1; ++order)
+    for (int order = 0; order < esp.drho_poly_order; ++order)
     {
         for (int k = 0; k < esp.P; ++k)
         {
@@ -104,7 +113,7 @@ std::vector<real> evaluateDerivative(const EspParameters& esp, const std::array<
         for (int k = 0; k < esp.P_padded; ++k)
         {
             drho[dim * esp.P_padded + k] = scalarHorner(
-                    gmx::makeConstArrayRef(esp.drho_coeff), esp.poly_order - 1, esp.P_padded, x[dim], k);
+                    gmx::makeConstArrayRef(esp.drho_coeff), esp.drho_poly_order, esp.P_padded, x[dim], k);
         }
     }
     return drho;
@@ -155,7 +164,7 @@ TEST(EspGather, AnalyticDerivativeMatchesFiniteDiff)
         for (int k = 0; k < esp.P_padded; ++k)
         {
             const real expected = scalarHorner(
-                    gmx::makeConstArrayRef(esp.drho_coeff), esp.poly_order - 1, esp.P_padded, x[dim], k);
+                    gmx::makeConstArrayRef(esp.drho_coeff), esp.drho_poly_order, esp.P_padded, x[dim], k);
             EXPECT_NEAR(drho[dim * esp.P_padded + k], expected, real(1e-6)) << "dim=" << dim << " k=" << k;
         }
     }

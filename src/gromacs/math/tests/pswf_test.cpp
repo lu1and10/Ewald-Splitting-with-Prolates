@@ -191,23 +191,6 @@ TEST(Pswf0, MatchesMpmathRefdataAt50Digits)
     }
 }
 
-TEST(Pswf0, EvalDerivativeVsFiniteDifference)
-{
-    Pswf0        psi(8.0);
-    const double h = 1e-6;
-    for (double x : { -0.7, -0.3, 0.0, 0.3, 0.7 })
-    {
-        const double finiteDifference = (psi.eval(x + h) - psi.eval(x - h)) / (2.0 * h);
-        EXPECT_NEAR(psi.evalDerivative(x), finiteDifference, 1e-7) << "x=" << x;
-    }
-}
-
-TEST(Pswf0, EvalDerivativeAtZeroIsZero)
-{
-    Pswf0 psi(8.0);
-    EXPECT_NEAR(psi.evalDerivative(0.0), 0.0, 1e-12);
-}
-
 TEST(Pswf0, IntegralAtZeroIsZero)
 {
     Pswf0 psi(8.0);

@@ -64,9 +64,6 @@ public:
     //! Value of psi_0^c at x in [-1, 1]. Returns zero outside support.
     double eval(double x) const;
 
-    //! Derivative psi_0^c'(x) on [-1, 1].
-    double evalDerivative(double x) const;
-
     //! Integral int_0^upper psi_0^c(u) du for upper in [-1, 1].
     double evalIntegral(double upper) const;
 
@@ -80,9 +77,6 @@ private:
 
 //! Tolerance to PSWF bandlimit c.
 double prolc180(double tolerance);
-
-//! d c / d epsilon for downstream chain rule.
-double prolc180Der(double tolerance);
 
 //! Compactly-supported PSWF split function Phi_{r_c}^{c_s}(x) at scalar x >= 0.
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);

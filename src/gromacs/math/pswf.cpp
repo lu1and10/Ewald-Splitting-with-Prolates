@@ -290,34 +290,6 @@ double evaluateRaw(const std::vector<double>&                coefficients,
     return value;
 }
 
-double evaluateRawDerivative(const std::vector<double>&                coefficients,
-                             const std::vector<std::array<double, 3>>& recurrenceCoefficients,
-                             double                                    x)
-{
-    const double xSquared = x * x;
-    double       pjm1     = 0.0;
-    double       pjm2     = 1.0;
-    double       dPjm1    = 0.0;
-    double       dPjm2    = 0.0;
-    double       dValue   = 0.0;
-
-    std::size_t i = 1;
-    for (; i < recurrenceCoefficients.size(); ++i)
-    {
-        const double a  = xSquared * recurrenceCoefficients[i][0] - recurrenceCoefficients[i][1];
-        const double dA = 2.0 * x * recurrenceCoefficients[i][0];
-        const double p  = pjm2 * a - pjm1 * recurrenceCoefficients[i][2];
-        const double dP = dPjm2 * a + pjm2 * dA - dPjm1 * recurrenceCoefficients[i][2];
-        dValue += coefficients[i] * dP;
-        pjm1  = pjm2;
-        pjm2  = p;
-        dPjm1 = dPjm2;
-        dPjm2 = dP;
-    }
-
-    return dValue;
-}
-
 struct GLNode
 {
     double x;
@@ -666,16 +638,6 @@ double Pswf0::eval(double x) const
     return evaluateRaw(legendreCoefficients_, recurrenceCoefficients_, x) * normalizationAt0_;
 }
 
-double Pswf0::evalDerivative(double x) const
-{
-    if (std::abs(x) > 1.0)
-    {
-        return 0.0;
-    }
-
-    return evaluateRawDerivative(legendreCoefficients_, recurrenceCoefficients_, x) * normalizationAt0_;
-}
-
 double Pswf0::evalIntegral(double upper) const
 {
     if (upper == 0.0)
@@ -720,17 +682,6 @@ double prolc180(double tolerance)
 
     GMX_ASSERT(c > 0.0 && c < 30.0, "prolc180 result out of expected range");
     return c;
-}
-
-double prolc180Der(double tolerance)
-{
-    if (tolerance <= 0.0 || tolerance >= 1.0)
-    {
-        throw std::invalid_argument("prolc180Der: tolerance must be in (0, 1)");
-    }
-
-    const double inverseLog = 1.0 / std::log(1.0 / tolerance);
-    return -(1.0 + 0.5 * inverseLog) / tolerance;
 }
 
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x)

@@ -112,6 +112,7 @@ CpuPpLongRangeNonbondeds::CpuPpLongRangeNonbondeds(int                         n
                                                    FILE*                       fplog) :
     numTpiAtoms_(numberOfTestPaticles),
     ewaldCoeffQ_(ewaldCoeffQ),
+    espNetChargeCorrectionCoeff_(inputrec.espParams.netChargeCorrectionCoeff),
     epsilonR_(epsilonR),
     chargeC6Sum_(chargeC6Sum),
     coulombInteractionType_(eeltype),
@@ -240,15 +241,32 @@ void CpuPpLongRangeNonbondeds::calculate(gmx_pme_t*                     pmedata,
             {
                 /* This is not in a subcounter because it takes a
                    negligible and constant-sized amount of time */
-                ewaldOutput.Vcorr_q += ewald_charge_correction(
-                        commrec->dd,
-                        epsilonR_,
-                        ewaldCoeffQ_,
-                        chargeC6Sum_,
-                        lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Coul)],
-                        box,
-                        &ewaldOutput.dvdl[FreeEnergyPerturbationCouplingType::Coul],
-                        ewaldOutput.vir_q);
+                const real lambdaCoul =
+                        lambda[static_cast<int>(FreeEnergyPerturbationCouplingType::Coul)];
+                if (coulombInteractionType_ == CoulombInteractionType::Esp)
+                {
+                    ewaldOutput.Vcorr_q += ewald_charge_correction_with_coefficient(
+                            commrec->dd,
+                            epsilonR_,
+                            espNetChargeCorrectionCoeff_,
+                            chargeC6Sum_,
+                            lambdaCoul,
+                            box,
+                            &ewaldOutput.dvdl[FreeEnergyPerturbationCouplingType::Coul],
+                            ewaldOutput.vir_q);
+                }
+                else
+                {
+                    ewaldOutput.Vcorr_q += ewald_charge_correction(
+                            commrec->dd,
+                            epsilonR_,
+                            ewaldCoeffQ_,
+                            chargeC6Sum_,
+                            lambdaCoul,
+                            box,
+                            &ewaldOutput.dvdl[FreeEnergyPerturbationCouplingType::Coul],
+                            ewaldOutput.vir_q);
+                }
             }
 
             if (computePmeOnCpu)

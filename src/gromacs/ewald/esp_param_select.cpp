@@ -53,11 +53,14 @@ namespace gmx::esp
 namespace
 {
 
-constexpr int  c_minEspStencilOrder = 4;
-constexpr int  c_maxEspStencilOrder = 16;
-constexpr int  c_maxEspGridSize     = 4096;
-constexpr real c_minEspAccuracy     = 1e-7_real;
-constexpr real c_maxEspAccuracy     = 1e-2_real;
+constexpr int  c_minEspStencilOrder    = 4;
+constexpr int  c_maxEspStencilOrder    = 12;
+constexpr int  c_maxEspGridSize        = 4096;
+constexpr real c_minEspAccuracy        = 1e-7_real;
+constexpr real c_maxEspAccuracy        = 1e-2_real;
+constexpr int  c_sparseSystemMaxAtoms  = 16;
+constexpr real c_sparseSystemAccuracy  = 5e-8_real;
+constexpr real c_sparseSystemGridScale = 0.75_real;
 
 void checkAutotuneInput(const EspAutotuneInput& in)
 {
@@ -117,10 +120,20 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
 
     EspParameters out;
 
-    out.c  = static_cast<real>(checkedProlc180(static_cast<double>(in.accuracy), "split c"));
-    out.c1 = static_cast<real>(checkedProlc180(static_cast<double>(in.spreadAccuracy), "spread c"));
-    out.P  = (in.stencilOrderOverride > 0) ? in.stencilOrderOverride
-                                           : estimateOrder(static_cast<double>(in.accuracy));
+    const bool useSparseSystemGuard = (in.natoms > 0 && in.natoms <= c_sparseSystemMaxAtoms);
+    const real splitAccuracy =
+            useSparseSystemGuard ? std::min(in.accuracy, c_sparseSystemAccuracy) : in.accuracy;
+    const real spreadAccuracy = useSparseSystemGuard
+                                        ? std::min(in.spreadAccuracy, real(0.5) * splitAccuracy)
+                                        : in.spreadAccuracy;
+
+    out.c  = static_cast<real>(checkedProlc180(static_cast<double>(splitAccuracy), "split c"));
+    out.c1 = static_cast<real>(checkedProlc180(static_cast<double>(spreadAccuracy), "spread c"));
+    const int estimatedOrder = estimateOrder(static_cast<double>(splitAccuracy));
+    out.P                    = (in.stencilOrderOverride > 0)
+                                       ? in.stencilOrderOverride
+                                       : (useSparseSystemGuard ? std::min(estimatedOrder, c_maxEspStencilOrder)
+                                                               : estimatedOrder);
     if (out.P < c_minEspStencilOrder || out.P > c_maxEspStencilOrder)
     {
         gmx_fatal(FARGS,
@@ -131,8 +144,9 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     }
     out.P_padded = ((out.P + GMX_SIMD_REAL_WIDTH - 1) / GMX_SIMD_REAL_WIDTH) * GMX_SIMD_REAL_WIDTH;
 
-    const real h0          = static_cast<real>(M_PI) * in.cutoff / out.c;
-    const int  minGridSize = 2 * (out.P - 1);
+    const real h0 = static_cast<real>(M_PI) * in.cutoff / out.c
+                    * (useSparseSystemGuard ? c_sparseSystemGridScale : real(1));
+    const int minGridSize = 2 * (out.P - 1);
     calcFftGrid(nullptr, in.box, h0, minGridSize, &out.nx, &out.ny, &out.nz);
     if (std::max({ out.nx, out.ny, out.nz }) > c_maxEspGridSize)
     {
@@ -150,7 +164,9 @@ EspParameters autotuneEsp(const EspAutotuneInput& in, const gmx::MDLogger& /*mdl
     out.psi0AtZero = static_cast<real>(pswfC.eval(0.0));
     out.lambda0_w  = static_cast<real>(pswfC1.lambda0());
     out.selfCoeff  = -1.0_real / (in.cutoff * out.lambda0);
-    out.cutoff     = in.cutoff;
+    out.netChargeCorrectionCoeff =
+            static_cast<real>(pswfNetChargeCorrectionCoeff(pswfC, static_cast<double>(in.cutoff)));
+    out.cutoff = in.cutoff;
 
     spreadRealPoly(out.P,
                    out.P_padded,

@@ -93,6 +93,7 @@ TEST(TpxIoEsp, RoundTripsEspParameters)
     ir.espParams.lambda0                      = 0.8125_real;
     ir.espParams.psi0AtZero                   = 1.0_real;
     ir.espParams.selfCoeff                    = -1.025641025641_real;
+    ir.espParams.netChargeCorrectionCoeff     = 0.375_real;
     ir.espParams.cutoff                       = ir.rcoulomb;
     ir.espParams.c1                           = 9.125_real;
     ir.espParams.lambda0_w                    = 0.734375_real;
@@ -140,6 +141,7 @@ TEST(TpxIoEsp, RoundTripsEspParameters)
     EXPECT_REAL_EQ(irRead.espParams.c, ir.espParams.c);
     EXPECT_REAL_EQ(irRead.espParams.lambda0, ir.espParams.lambda0);
     EXPECT_REAL_EQ(irRead.espParams.selfCoeff, ir.espParams.selfCoeff);
+    EXPECT_REAL_EQ(irRead.espParams.netChargeCorrectionCoeff, ir.espParams.netChargeCorrectionCoeff);
     EXPECT_REAL_EQ(irRead.espParams.c1, ir.espParams.c1);
     EXPECT_EQ(irRead.espParams.poly_order, ir.espParams.poly_order);
     EXPECT_EQ(irRead.espParams.drho_poly_order, ir.espParams.drho_poly_order);

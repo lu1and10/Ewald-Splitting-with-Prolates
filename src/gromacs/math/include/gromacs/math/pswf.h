@@ -84,6 +84,9 @@ double prolc180(double tolerance);
 //! Compactly-supported PSWF split function Phi_{r_c}^{c_s}(x) at scalar x >= 0.
 double pswfSplitFunction(const Pswf0& psi, double rcInv, double x);
 
+//! Net-charge correction coefficient R_hat_short(0) / 2 for ESP Coulomb.
+double pswfNetChargeCorrectionCoeff(const Pswf0& psi, double cutoff);
+
 //! Epsilon to stencil order P using the ESP calibration heuristic, clamped to [4, 16].
 int estimateOrder(double tolerance);
 

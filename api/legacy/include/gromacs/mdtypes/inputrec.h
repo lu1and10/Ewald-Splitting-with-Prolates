@@ -84,6 +84,8 @@ struct EspParameters
     real psi0AtZero = 0;
     //! ESP self correction coefficient, -1/(r_c lambda_0).
     real selfCoeff = 0;
+    //! Net-charge correction coefficient for ESP, R_hat_short(0) / 2.
+    real netChargeCorrectionCoeff = 0;
     //! Snapshot of ir->rcoulomb.
     real cutoff = 0;
     //! Spreading-window bandlimit.

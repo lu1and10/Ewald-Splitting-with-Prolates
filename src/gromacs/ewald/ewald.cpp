@@ -309,15 +309,14 @@ real do_ewald(bool                           havePbcXY2Walls,
     return energy;
 }
 
-real ewald_charge_correction(const gmx_domdec_t*         dd,
-                             const real                  epsilonR,
-                             const real                  ewaldcoeffQ,
-                             gmx::ArrayRef<const double> qsum,
-                             const real                  lambda,
-                             const matrix                box,
-                             real*                       dvdlambda,
-                             tensor                      vir)
-
+real ewald_charge_correction_with_coefficient(const gmx_domdec_t*         dd,
+                                              const real                  epsilonR,
+                                              const real                  coefficient,
+                                              gmx::ArrayRef<const double> qsum,
+                                              const real                  lambda,
+                                              const matrix                box,
+                                              real*                       dvdlambda,
+                                              tensor                      vir)
 {
     real enercorr = 0;
 
@@ -326,7 +325,7 @@ real ewald_charge_correction(const gmx_domdec_t*         dd,
         /* Apply charge correction */
         real vol = box[XX][XX] * box[YY][YY] * box[ZZ][ZZ];
 
-        real fac = M_PI * gmx::c_one4PiEps0 / (epsilonR * 2.0 * vol * vol * gmx::square(ewaldcoeffQ));
+        real fac = coefficient * gmx::c_one4PiEps0 / (epsilonR * vol * vol);
 
         real qs2A = qsum[0] * qsum[0];
         real qs2B = qsum[1] * qsum[1];
@@ -344,4 +343,17 @@ real ewald_charge_correction(const gmx_domdec_t*         dd,
     }
 
     return enercorr;
+}
+
+real ewald_charge_correction(const gmx_domdec_t*         dd,
+                             const real                  epsilonR,
+                             const real                  ewaldcoeffQ,
+                             gmx::ArrayRef<const double> qsum,
+                             const real                  lambda,
+                             const matrix                box,
+                             real*                       dvdlambda,
+                             tensor                      vir)
+{
+    return ewald_charge_correction_with_coefficient(
+            dd, epsilonR, M_PI / (2.0 * gmx::square(ewaldcoeffQ)), qsum, lambda, box, dvdlambda, vir);
 }

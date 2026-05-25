@@ -500,10 +500,11 @@ void calc_exponentials_pswf_impl(const int                  nx,
                 const SimdReal chiHat = evaluateSplitFourierPolynomialSimd<splitPolyOrderSpecialization>(
                         splitPoly, splitPolyOrder, normalizedArg);
 
-                const SimdReal bspTotal = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
-                const SimdReal denom    = bspTotal * qSquared;
-                const auto     valid    = (arg <= bandlimitSimd) && (denom != zeroSimd);
-                const SimdReal pk = selectByMask((influencePrefactorSimd * chiHat) / denom, valid);
+                const SimdReal bspTotal  = loadU<SimdReal>(&bspXScratch[lx]) * bspYZSimd;
+                const SimdReal denom     = bspTotal * qSquared;
+                const auto     valid     = (arg <= bandlimitSimd) && (denom != zeroSimd);
+                const SimdReal safeDenom = denom + selectByMask(oneSimd, denom == zeroSimd);
+                const SimdReal pk = selectByMask((influencePrefactorSimd * chiHat) / safeDenom, valid);
 
                 storeU(&chiScratch[lx], selectByMask(chiHat, arg <= bandlimitSimd));
                 storeU(&pkScratch[lx], pk);

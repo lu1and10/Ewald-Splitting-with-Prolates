@@ -192,6 +192,8 @@ private:
     int numTpiAtoms_;
     //! Ewald charge coefficient
     real ewaldCoeffQ_;
+    //! Net-charge correction coefficient for ESP.
+    real espNetChargeCorrectionCoeff_;
     //! Dielectric constant
     real epsilonR_;
     //! [0]: sum of charges; [1]: sum of C6's

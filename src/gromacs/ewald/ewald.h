@@ -127,4 +127,19 @@ real ewald_charge_correction(const gmx_domdec_t*         dd,
                              real*                       dvdlambda,
                              tensor                      vir);
 
+/*! \brief Calculate the net-charge correction from a short-range zero-mode coefficient.
+ *
+ * The coefficient is R_hat_short(0) / 2, where R_short is the direct-space
+ * part of the Ewald split.
+ *
+ * Should only be called on one thread. */
+real ewald_charge_correction_with_coefficient(const gmx_domdec_t*         dd,
+                                              real                        epsilonR,
+                                              real                        coefficient,
+                                              gmx::ArrayRef<const double> qsum,
+                                              real                        lambda,
+                                              const matrix                box,
+                                              real*                       dvdlambda,
+                                              tensor                      vir);
+
 #endif

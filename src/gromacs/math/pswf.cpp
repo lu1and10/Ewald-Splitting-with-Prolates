@@ -734,6 +734,30 @@ double pswfSplitFunction(const Pswf0& psi, double rcInv, double x)
     return (2.0 / psi.lambda0()) * psi.evalIntegral(normalizedX);
 }
 
+double pswfNetChargeCorrectionCoeff(const Pswf0& psi, double cutoff)
+{
+    GMX_ASSERT(cutoff > 0.0, "pswfNetChargeCorrectionCoeff: cutoff must be positive");
+
+    constexpr int kPanels = 64;
+    const double  h       = 1.0 / kPanels;
+
+    double integral = 0.0;
+    for (int panel = 0; panel < kPanels; ++panel)
+    {
+        const double lower = panel * h;
+        const double upper = (panel + 1) * h;
+        const double mid   = 0.5 * (lower + upper);
+        const double half  = 0.5 * (upper - lower);
+        for (const auto& node : c_gaussLegendreNodes16)
+        {
+            const double s = mid + half * node.x;
+            integral += half * node.weight * s * pswfSplitFunction(psi, 1.0, s);
+        }
+    }
+
+    return 2.0 * c_pi * cutoff * cutoff * (0.5 - integral);
+}
+
 int estimateOrder(double tolerance)
 {
     if (tolerance <= 0.0 || tolerance >= 1.0)

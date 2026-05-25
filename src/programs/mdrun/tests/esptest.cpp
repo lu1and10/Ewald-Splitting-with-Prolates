@@ -152,6 +152,44 @@ std::string makePmeMdp(const int    nsteps,
             nstfout);
 }
 
+std::string makeEwaldMdp(const int    nsteps,
+                         const int    nstfout,
+                         const double fourierSpacing = 0.02,
+                         const double ewaldRtol      = 1.0e-10)
+{
+    return formatString(
+            "integrator               = md\n"
+            "nsteps                   = %d\n"
+            "dt                       = 0.001\n"
+            "continuation             = yes\n"
+            "constraints              = none\n"
+            "cutoff-scheme            = Verlet\n"
+            "coulombtype              = Ewald\n"
+            "rcoulomb                 = 0.8\n"
+            "rlist                    = 0.8\n"
+            "vdwtype                  = Cut-off\n"
+            "rvdw                     = 0.8\n"
+            "fourierspacing           = %.8g\n"
+            "ewald-rtol               = %.8g\n"
+            "pbc                      = xyz\n"
+            "pcoupl                   = no\n"
+            "tcoupl                   = no\n"
+            "free-energy              = no\n"
+            "ewald-geometry           = 3d\n"
+            "nwall                    = 0\n"
+            "nstlist                  = 1\n"
+            "nstcalcenergy            = 1\n"
+            "nstenergy                = 1\n"
+            "nstxout                  = 0\n"
+            "nstvout                  = 0\n"
+            "nstfout                  = %d\n"
+            "nstlog                   = 0\n",
+            nsteps,
+            fourierSpacing,
+            ewaldRtol,
+            nstfout);
+}
+
 TEST(EspMdpGeneration, HighAccuracyPmeSetsEwaldRtol)
 {
     const std::string mdp = makePmeMdp(1, 1, 0.04, 6);
@@ -497,6 +535,31 @@ TEST_F(EspIntegrationTest, NaClNonNeutral_HighQ2SumSmoke)
     const std::vector<RVec> forces = readLastForces(output.trajectoryFileName);
     ASSERT_EQ(forces.size(), 3U);
     expectFiniteForces(forces);
+}
+
+TEST_F(EspIntegrationTest, NaClNonNeutral_ForceErrorVsHighAccuracyEwald)
+{
+    const RunOutput reference =
+            runInlineIonSystem(makeEwaldMdp(0, 1, 0.02, 1.0e-10), false, "nacl-nonneutral-ewald");
+    const RunOutput test =
+            runInlineIonSystem(makeEspMdp(1.0e-4, 0, 1, -1), false, "nacl-nonneutral-esp");
+
+    const std::vector<RVec> refForces  = readLastForces(reference.trajectoryFileName);
+    const std::vector<RVec> testForces = readLastForces(test.trajectoryFileName);
+    expectFiniteForces(refForces);
+    expectFiniteForces(testForces);
+
+    const double forceDelta = relativeL2ForceError(testForces, refForces);
+    EXPECT_TRUE(std::isfinite(forceDelta));
+    EXPECT_LT(forceDelta, 1.0e-4) << "force delta=" << forceDelta;
+
+    /* For non-neutral systems the absolute electrostatic energy contains a
+     * method-specific homogeneous-background constant. The corresponding ESP
+     * coefficient is covered by unit tests; here we verify the observable
+     * force agreement and that the integrated energy path remains finite.
+     */
+    const real testEnergy = readLastElectrostaticEnergy(test.energyFileName);
+    EXPECT_TRUE(std::isfinite(testEnergy));
 }
 
 TEST_F(EspIntegrationTest, NaClTriclinic_SingleStepSmoke)

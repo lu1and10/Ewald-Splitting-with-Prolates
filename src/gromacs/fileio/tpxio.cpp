@@ -1964,6 +1964,7 @@ static void do_inputrec(gmx::ISerializer* serializer, t_inputrec* ir, int file_v
             serializer->doReal(&ir->espParams.lambda0);
             serializer->doReal(&ir->espParams.psi0AtZero);
             serializer->doReal(&ir->espParams.selfCoeff);
+            serializer->doReal(&ir->espParams.netChargeCorrectionCoeff);
             serializer->doReal(&ir->espParams.cutoff);
             serializer->doReal(&ir->espParams.c1);
             serializer->doReal(&ir->espParams.lambda0_w);

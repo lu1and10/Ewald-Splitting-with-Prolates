@@ -265,6 +265,15 @@ TEST(EspSolve, ChiHatZeroOutsideBandlimit)
     EXPECT_EQ(f.solver[f.index(1, 0, 0)], real(0));
 }
 
+TEST(EspSolve, ZeroModulusModesAreMaskedBeforeDivision)
+{
+    SolveFixture f;
+    f.bspX[2] = real(0);
+    f.run();
+
+    EXPECT_EQ(f.solver[f.index(2, 0, 0)], real(0));
+}
+
 TEST(EspSolve, OrthorhombicScalingMatchesAnalytical)
 {
     SolveFixture f;

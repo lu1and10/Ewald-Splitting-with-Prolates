@@ -39,10 +39,12 @@
 #include <cmath>
 
 #include <algorithm>
+#include <array>
 
 #include <gtest/gtest.h>
 
 #include "gromacs/ewald/calculate_spline_moduli.h"
+#include "gromacs/ewald/ewald.h"
 #include "gromacs/ewald/pme_load_balancing.h"
 #include "gromacs/math/pswf.h"
 #include "gromacs/mdtypes/md_enums.h"
@@ -75,6 +77,23 @@ double fourierLambdaReference(const Pswf0& psi)
     return (sum * h / 3.0) / psi.eval(0.5);
 }
 
+double netChargeCorrectionCoeffReference(const Pswf0& psi, const double cutoff)
+{
+    constexpr int intervals = 4096;
+    const double  h         = 1.0 / intervals;
+
+    double sum = 0.0;
+    for (int i = 0; i <= intervals; ++i)
+    {
+        const double s      = i * h;
+        const double weight = (i == 0 || i == intervals) ? 1.0 : (i % 2 == 0 ? 2.0 : 4.0);
+        sum += weight * s * pswfSplitFunction(psi, 1.0, s);
+    }
+
+    const double integral = sum * h / 3.0;
+    return 2.0 * c_pi * cutoff * cutoff * (0.5 - integral);
+}
+
 double evaluateLaneMajorPolynomial(const std::vector<real, gmx::AlignedAllocator<real>>& coefs,
                                    const int                                             order,
                                    const int    paddedOrder,
@@ -100,6 +119,21 @@ EspAutotuneInput makeCubicSpcEWaterInput(real eps)
     in.box[ZZ][ZZ]          = 2.46_real;
     in.natoms               = 1500;
     in.q2sum                = 500.0 * (0.4238 * 0.4238 * 2 + 0.8476 * 0.8476);
+    in.stencilOrderOverride = -1;
+    return in;
+}
+
+EspAutotuneInput makeSparseIonInput(real eps)
+{
+    EspAutotuneInput in{};
+    in.accuracy             = eps;
+    in.spreadAccuracy       = 0.5_real * eps;
+    in.cutoff               = 0.8_real;
+    in.box[XX][XX]          = 3.0_real;
+    in.box[YY][YY]          = 3.0_real;
+    in.box[ZZ][ZZ]          = 3.0_real;
+    in.natoms               = 3;
+    in.q2sum                = 3.0;
     in.stencilOrderOverride = -1;
     return in;
 }
@@ -130,6 +164,17 @@ TEST(EspAutotune, StencilOrderMatchesLammpsIntermediateToleranceHeuristic)
     EXPECT_EQ(out.P, 7);
 }
 
+TEST(EspAutotune, SparseSystemsUseConservativeReciprocalParameters)
+{
+    EspAutotuneInput in  = makeSparseIonInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    EXPECT_EQ(out.P, 12);
+    EXPECT_GE(out.nx, 28);
+    EXPECT_GE(out.ny, 28);
+    EXPECT_GE(out.nz, 28);
+}
+
 TEST(EspAutotune, GridSpacingMatchesPiRcOverC)
 {
     EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
@@ -153,7 +198,7 @@ TEST(EspAutotune, TightToleranceUsesPracticalGridSelection)
     EXPECT_GT(out.nx, 1);
     EXPECT_GT(out.ny, 1);
     EXPECT_GT(out.nz, 1);
-    EXPECT_LE(out.P, 16);
+    EXPECT_LE(out.P, 12);
 }
 
 TEST(EspAutotune, FatalsOnUnsupportedTightAccuracy)
@@ -229,7 +274,48 @@ TEST(EspAutotune, ScalarFieldsPopulated)
     EXPECT_NEAR(out.psi0AtZero, 1.0_real, 1e-6_real);
     EXPECT_NE(out.lambda0_w, 0.0_real);
     EXPECT_LT(out.selfCoeff, 0.0_real);
+    EXPECT_GT(out.netChargeCorrectionCoeff, 0.0_real);
     EXPECT_EQ(out.cutoff, in.cutoff);
+}
+
+TEST(EspAutotune, NetChargeCorrectionCoeffMatchesDirectIntegral)
+{
+    EspAutotuneInput in  = makeCubicSpcEWaterInput(1e-4_real);
+    EspParameters    out = autotuneEsp(in, nullLogger);
+
+    const Pswf0  psi(out.c);
+    const double reference = netChargeCorrectionCoeffReference(psi, in.cutoff);
+
+    EXPECT_NEAR(out.netChargeCorrectionCoeff, reference, 5e-6_real);
+}
+
+TEST(EspChargeCorrection, GaussianWrapperMatchesExplicitCoefficient)
+{
+    const real                  epsilonR = 2.5_real;
+    const real                  alpha    = 3.0_real;
+    const real                  lambda   = 0.25_real;
+    const std::array<double, 2> qsum     = { 1.5, -0.5 };
+    matrix                      box      = { { 0 } };
+    box[XX][XX]                          = 2.0_real;
+    box[YY][YY]                          = 3.0_real;
+    box[ZZ][ZZ]                          = 4.0_real;
+
+    real       dvdlGaussian   = 0;
+    tensor     virGaussian    = { { 0 } };
+    const real energyGaussian = ewald_charge_correction(
+            nullptr, epsilonR, alpha, qsum, lambda, box, &dvdlGaussian, virGaussian);
+
+    real       dvdlExplicit   = 0;
+    tensor     virExplicit    = { { 0 } };
+    const real energyExplicit = ewald_charge_correction_with_coefficient(
+            nullptr, epsilonR, static_cast<real>(c_pi / (2.0 * alpha * alpha)), qsum, lambda, box, &dvdlExplicit, virExplicit);
+
+    EXPECT_REAL_EQ(energyExplicit, energyGaussian);
+    EXPECT_REAL_EQ(dvdlExplicit, dvdlGaussian);
+    for (int d = 0; d < DIM; ++d)
+    {
+        EXPECT_REAL_EQ(virExplicit[d][d], virGaussian[d][d]);
+    }
 }
 
 TEST(EspAutotune, PolynomialTablesPopulatedRealAndFourier)

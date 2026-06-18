@@ -194,11 +194,11 @@ def make_kernel_impl_name(type, elec, ljtreat, ener, force_order, energy_order):
 def make_explicit_instantiation(kernel_name):
     text = "template void\n"
     text += "{0}(\n".format(kernel_name)
-    text += "        const NbnxnPairlistCpu&    pairlist,\n"
-    text += "        const nbnxn_atomdata_t&    nbat,\n"
+    text += "        const NbnxmPairlistCpu&    pairlist,\n"
+    text += "        const nbnxm_atomdata_t&    nbat,\n"
     text += "        const interaction_const_t& ic,\n"
     text += "        const rvec*                shift_vec,\n"
-    text += "        nbnxn_atomdata_output_t*   out);\n\n"
+    text += "        nbnxm_atomdata_output_t*   out);\n\n"
     return text
 
 

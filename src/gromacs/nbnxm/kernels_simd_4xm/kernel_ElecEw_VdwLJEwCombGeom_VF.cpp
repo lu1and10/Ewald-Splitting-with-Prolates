@@ -72,11 +72,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   6,
-                                  8>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  8>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -86,11 +86,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   7,
-                                  8>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  8>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -100,11 +100,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   7,
-                                  9>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  9>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -114,11 +114,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   8,
-                                  8>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  8>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -128,11 +128,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   8,
-                                  9>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  9>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -142,11 +142,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   8,
-                                  10>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  10>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -156,11 +156,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   9,
-                                  9>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  9>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -170,11 +170,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   9,
-                                  10>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  10>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -184,11 +184,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   9,
-                                  11>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  11>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -198,11 +198,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   10,
-                                  10>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  10>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -212,11 +212,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   10,
-                                  11>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  11>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -226,11 +226,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   10,
-                                  12>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  12>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -240,11 +240,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   11,
-                                  11>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  11>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -254,11 +254,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   11,
-                                  12>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  12>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -268,11 +268,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   11,
-                                  13>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  13>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -282,11 +282,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   12,
-                                  12>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  12>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -296,11 +296,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   12,
-                                  13>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  13>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -310,11 +310,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   12,
-                                  14>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  14>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -324,11 +324,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   13,
-                                  13>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  13>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -338,11 +338,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   13,
-                                  14>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  14>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -352,11 +352,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   13,
-                                  15>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  15>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -366,11 +366,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   14,
-                                  14>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  14>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -380,11 +380,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   14,
-                                  15>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  15>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -394,11 +394,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   14,
-                                  16>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  16>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -408,11 +408,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   15,
-                                  15>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  15>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -422,11 +422,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   15,
-                                  16>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  16>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -436,11 +436,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   15,
-                                  17>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  17>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -450,11 +450,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   16,
-                                  16>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  16>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -464,11 +464,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   16,
-                                  17>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  17>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -478,11 +478,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   16,
-                                  18>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  18>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -492,11 +492,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   17,
-                                  17>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  17>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -506,11 +506,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   17,
-                                  18>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  18>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -520,11 +520,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   17,
-                                  19>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  19>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -534,11 +534,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   18,
-                                  18>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  18>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -548,11 +548,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   18,
-                                  19>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  19>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -562,11 +562,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   18,
-                                  20>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  20>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -576,11 +576,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   19,
-                                  19>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  19>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -590,11 +590,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   19,
-                                  20>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  20>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -604,11 +604,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   19,
-                                  21>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  21>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -618,11 +618,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   20,
-                                  20>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  20>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -632,11 +632,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   20,
-                                  21>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  21>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -646,11 +646,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   20,
-                                  22>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  22>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -660,11 +660,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   21,
-                                  21>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  21>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -674,11 +674,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   21,
-                                  22>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  22>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -688,11 +688,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   22,
-                                  22>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  22>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -702,11 +702,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  8>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  8>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -716,11 +716,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  9>(const NbnxnPairlistCpu&    pairlist,
-                                     const nbnxn_atomdata_t&    nbat,
+                                  9>(const NbnxmPairlistCpu&    pairlist,
+                                     const nbnxm_atomdata_t&    nbat,
                                      const interaction_const_t& ic,
                                      const rvec*                shift_vec,
-                                     nbnxn_atomdata_output_t*   out);
+                                     nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -730,11 +730,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  10>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  10>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -744,11 +744,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  11>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  11>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -758,11 +758,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  12>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  12>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -772,11 +772,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  13>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  13>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -786,11 +786,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  14>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  14>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -800,11 +800,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  15>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  15>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -814,11 +814,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  16>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  16>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -828,11 +828,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  17>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  17>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -842,11 +842,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  18>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  18>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -856,11 +856,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  19>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  19>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -870,11 +870,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  20>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  20>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -884,11 +884,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  21>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  21>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -898,11 +898,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  22>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  22>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   KernelCoulombType::EwaldAnalytical,
@@ -912,11 +912,11 @@ template void nbnxmKernelSimdImpl<KernelLayout::r4xM,
                                   LJEwald::CombGeometric,
                                   EnergyOutput::System,
                                   -1,
-                                  -1>(const NbnxnPairlistCpu&    pairlist,
-                                      const nbnxn_atomdata_t&    nbat,
+                                  -1>(const NbnxmPairlistCpu&    pairlist,
+                                      const nbnxm_atomdata_t&    nbat,
                                       const interaction_const_t& ic,
                                       const rvec*                shift_vec,
-                                      nbnxn_atomdata_output_t*   out);
+                                      nbnxm_atomdata_output_t*   out);
 
 } // namespace gmx
 

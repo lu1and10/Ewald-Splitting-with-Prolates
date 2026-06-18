@@ -66,11 +66,11 @@ template<KernelLayout         kernelLayout,
          EnergyOutput         energyOutput,
          int                  c_espForcePolyOrder,
          int                  c_espEnergyPolyOrder>
-void nbnxmKernelSimdImpl(const NbnxnPairlistCpu&    pairlist,
-                         const nbnxn_atomdata_t&    nbat,
+void nbnxmKernelSimdImpl(const NbnxmPairlistCpu&    pairlist,
+                         const nbnxm_atomdata_t&    nbat,
                          const interaction_const_t& ic,
                          const rvec*                shift_vec,
-                         nbnxn_atomdata_output_t*   out);
+                         nbnxm_atomdata_output_t*   out);
 
 /* Declare all the different kernel functions.
  */
